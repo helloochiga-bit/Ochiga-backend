@@ -1,72 +1,62 @@
-// src/routes/devices.ts
 import express from "express";
-import { supabaseAdmin } from "../supabase/client";
 import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/roles";
+import { Client as SSDPClient } from "node-ssdp";
 import mqtt from "mqtt";
 
 const router = express.Router();
 
-// MQTT Broker URL (use Mosquitto locally or your broker)
-const MQTT_URL = process.env.MQTT_URL || "mqtt://localhost:1883";
-const mqttClient = mqtt.connect(MQTT_URL);
-
-const discoveredDevices: any[] = [];
-
-// Listen for device "announce" messages
-mqttClient.on("connect", () => {
-  console.log("Connected to MQTT broker");
-  mqttClient.subscribe("ochiga/+/device/+/announce", (err) => {
-    if (err) console.error("MQTT subscribe error:", err);
-  });
-});
-
-mqttClient.on("message", (topic, message) => {
-  try {
-    const payload = JSON.parse(message.toString());
-    // payload should contain { id, name, protocol }
-    const exists = discoveredDevices.find((d) => d.id === payload.id);
-    if (!exists) discoveredDevices.push({ ...payload, status: "offline" });
-  } catch (err) {
-    console.error("Invalid MQTT message:", message.toString());
-  }
-});
-
-/** GET /devices/discover - discover devices dynamically */
+/** GET /devices/discover - discover real IoT devices on local network */
 router.get("/discover", requireAuth, async (req, res) => {
-  try {
-    // fetch registered devices
-    const { data: registeredDevices } = await supabaseAdmin.from("devices").select("*");
+  const discoveredDevices: any[] = [];
 
-    // merge registered & discovered devices
-    const devices = discoveredDevices.map((dev) => {
-      const registered = registeredDevices?.find((d: any) => d.name.toLowerCase() === dev.name.toLowerCase());
-      return {
-        ...dev,
-        status: registered ? "connected" : dev.status,
-        id: registered?.id || dev.id,
-      };
+  // --------- SSDP / UPnP discovery (Smart TVs, IR Hubs) ---------
+  const ssdp = new SSDPClient({ explicitSocketBind: true });
+
+  ssdp.on("response", (headers, statusCode, rinfo) => {
+    discoveredDevices.push({
+      id: headers.USN || rinfo.address,
+      name: headers.SERVER || "Unknown Device",
+      protocol: "ssdp",
+      ip: rinfo.address,
+      port: rinfo.port,
     });
-
-    res.json({ devices });
-  } catch (err: any) {
-    console.error("Device discovery error:", err);
-    res.status(500).json({ message: err.message || "Device discovery failed" });
-  }
-});
-
-/** POST /devices/:id/action - trigger a device action via MQTT */
-router.post("/:id/action", requireAuth, async (req, res) => {
-  const id = req.params.id;
-  const { action, params, topic } = req.body;
-
-  // Find device topic
-  const deviceTopic = topic || `ochiga/+/device/${id}/set`;
-
-  mqttClient.publish(deviceTopic, JSON.stringify({ action, params }), { qos: 1 }, (err) => {
-    if (err) return res.status(500).json({ ok: false, message: err.message });
-    res.json({ ok: true, message: `Action ${action} sent to device ${id}` });
   });
+
+  ssdp.search("ssdp:all");
+
+  // Wait 2 seconds for SSDP responses
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
+  // --------- MQTT discovery (Smart switches, Zigbee gateways, etc) ---------
+  const mqttClient = mqtt.connect("mqtt://localhost:1883"); // Replace with your broker
+  mqttClient.on("connect", () => {
+    mqttClient.subscribe("ochiga/+/device/+/announce", { qos: 1 });
+  });
+
+  mqttClient.on("message", (topic, message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      discoveredDevices.push({
+        id: data.id,
+        name: data.name,
+        protocol: "mqtt",
+        ...data,
+      });
+    } catch (err) {
+      console.warn("Failed to parse MQTT device announcement", err);
+    }
+  });
+
+  // Wait 2 seconds for MQTT announcements
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  mqttClient.end(true);
+
+  if (discoveredDevices.length === 0) {
+    return res.status(404).json({ message: "No devices found" });
+  }
+
+  res.json({ devices: discoveredDevices });
 });
 
 export default router;
