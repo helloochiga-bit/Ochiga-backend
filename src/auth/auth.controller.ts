@@ -1,17 +1,11 @@
-import { Router } from "express";
-import { AuthService } from "./auth.service";
+import { Request, Response } from "express";
+import { authService } from "../services/auth.service";
 
-const router = Router();
-
-router.post("/login", async (req, res) => {
-  const { usernameOrEmail, password } = req.body;
-
+export const login = async (req: Request, res: Response) => {
   try {
-    const result = await authService.login({ usernameOrEmail, password });
-    return res.json(result);
+    const result = await authService.login(req.body);
+    return res.status(200).json(result);
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
   }
-});
-
-export default router;
+};
