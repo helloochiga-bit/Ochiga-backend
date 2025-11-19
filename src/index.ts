@@ -2,12 +2,12 @@ import app from "./app";
 import { PORT, logPortBinding } from "./config/env";
 
 // 👉 IMPORT ROUTES
-import homeRoutes from "./routes/home";
+import estatesRoutes from "./routes/estates";
 import onboardingRoutes from "./routes/onboarding";
 
 // 👉 REGISTER ROUTES BEFORE SERVER STARTS
-app.use("/estate", homeRoutes);
-app.use("/auth/onboard", onboardingRoutes);
+app.use("/api/estate", estatesRoutes);       // ✅ matches frontend /api/estate/create-home
+app.use("/auth/onboard", onboardingRoutes);  // existing onboarding routes
 
 const server = app.listen(PORT, () => {
   logPortBinding(PORT);
