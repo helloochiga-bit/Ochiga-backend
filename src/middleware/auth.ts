@@ -11,12 +11,26 @@ if (!SUPABASE_JWT_SECRET) {
   throw new Error("Missing SUPABASE_JWT_SECRET in environment");
 }
 
-export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+export function requireAuth(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+) {
+
+  // 🔥 STEP 2 — DEBUG LOG: SEE EXACT HEADERS BACKEND IS RECEIVING
+  console.log("🔥 Incoming request headers:", req.headers);
+
   const auth = req.headers.authorization;
-  if (!auth) return res.status(401).json({ error: "Missing authorization header" });
+  if (!auth) {
+    console.log("❌ No Authorization header found");
+    return res.status(401).json({ error: "Missing authorization header" });
+  }
 
   const parts = auth.split(" ");
-  if (parts.length !== 2) return res.status(401).json({ error: "Invalid authorization header" });
+  if (parts.length !== 2) {
+    console.log("❌ Invalid Authorization header format:", auth);
+    return res.status(401).json({ error: "Invalid authorization header" });
+  }
 
   const token = parts[1];
 
@@ -27,12 +41,14 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
     req.user = {
       id: payload.sub,
       email: payload.email,
-      role: payload.role || "resident", // fallback if role not in JWT
+      role: payload.role || "resident", // default role fallback
     };
 
+    console.log("✅ JWT Verified Successfully:", req.user);
+
     next();
-  } catch (err) {
-    console.error("JWT verification failed:", err.message);
+  } catch (err: any) {
+    console.error("❌ JWT verification failed:", err.message);
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
