@@ -5,7 +5,6 @@ import { requireRole } from "../middleware/roles";
 import { Client as SSDPClient } from "node-ssdp";
 import mqtt from "mqtt";
 import ping from "ping";
-import os from "os";
 import { networkInterfaces } from "os";
 import { supabaseAdmin } from "../supabase/client";
 
@@ -95,7 +94,7 @@ async function ssdpDiscover(timeout = 3500) {
 }
 
 /* -------------------------------------------------------
-    MQTT DISCOVERY (smart switches, hubs, zigbee gateways)
+    MQTT DISCOVERY
 ------------------------------------------------------- */
 async function mqttDiscover(timeout = 3000) {
   return new Promise((resolve) => {
@@ -135,7 +134,11 @@ async function mqttDiscover(timeout = 3000) {
 ------------------------------------------------------- */
 router.get("/discover", requireAuth, async (req, res) => {
   try {
-    console.log("🔍 [DEVICE SCAN] Scan button triggered from frontend!");
+    console.log("🔍 [DEVICE SCAN] Scan triggered!");
+
+    // --- DEBUG: Show headers to check token ---
+    console.log("Headers received:", req.headers);
+    console.log("Authorization header:", req.headers.authorization);
 
     // 1. SSDP SCAN
     const ssdp = await ssdpDiscover();
@@ -155,17 +158,13 @@ router.get("/discover", requireAuth, async (req, res) => {
 
     console.log(`🔍 [DEVICE SCAN] ${all.length} device(s) discovered:`);
     all.forEach((d) =>
-      console.log(
-        `- ${d.name} (${d.type || d.protocol}) at ${d.ip} [${d.protocol}]`
-      )
+      console.log(`- ${d.name} (${d.type || d.protocol}) at ${d.ip} [${d.protocol}]`)
     );
 
     return res.json({ devices: all });
   } catch (err: any) {
     console.error("[DEVICE SCAN] Discovery error:", err);
-    return res
-      .status(500)
-      .json({ error: "Discovery failed", details: err.message });
+    return res.status(500).json({ error: "Discovery failed", details: err.message });
   }
 });
 
