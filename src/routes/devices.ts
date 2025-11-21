@@ -4,111 +4,202 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/roles";
 import { Client as SSDPClient } from "node-ssdp";
 import mqtt from "mqtt";
-import { supabaseAdmin } from "../supabase/client"; // make sure this exists
+import ping from "ping";
+import os from "os";
+import { networkInterfaces } from "os";
+import { supabaseAdmin } from "../supabase/client";
 
 const router = express.Router();
 
-/** GET /devices/discover - discover real IoT devices on local network */
-router.get("/discover", requireAuth, async (req, res) => {
-  const discoveredDevices: any[] = [];
+const DEFAULT_ICON =
+  "https://ochiga-assets.s3.amazonaws.com/device/default-device.png";
 
-  try {
-    // --------- SSDP / UPnP discovery (Smart TVs, IR Hubs) ---------
-    const ssdp = new SSDPClient({ explicitSocketBind: true });
+/* -------------------------------------------------------
+    GET LOCAL NETWORK INFO
+------------------------------------------------------- */
+function getLocalNetworkInfo() {
+  const nets = networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === "IPv4" && !net.internal) {
+        return { address: net.address };
+      }
+    }
+  }
+  return {};
+}
 
-    ssdp.on("response", (headers, statusCode, rinfo) => {
-      discoveredDevices.push({
+/* -------------------------------------------------------
+    SIMPLE PING SWEEP — fallback when SSDP fails
+------------------------------------------------------- */
+async function pingSweep(limit = 254) {
+  const found: any[] = [];
+  const info = getLocalNetworkInfo();
+
+  if (!info.address) return found;
+
+  const parts = info.address.split(".");
+  const base = parts.slice(0, 3).join(".");
+
+  const jobs = [];
+  for (let i = 1; i <= limit; i++) {
+    const ip = `${base}.${i}`;
+    jobs.push(
+      ping.promise.probe(ip, { timeout: 2 }).then((res) => {
+        if (res.alive) {
+          found.push({
+            id: ip,
+            name: `Device ${ip}`,
+            protocol: "ping",
+            ip,
+            status: "found",
+            icon: DEFAULT_ICON,
+          });
+        }
+      })
+    );
+  }
+
+  await Promise.all(jobs);
+  return found;
+}
+
+/* -------------------------------------------------------
+    SSDP DISCOVERY
+------------------------------------------------------- */
+async function ssdpDiscover(timeout = 3500) {
+  return new Promise((resolve) => {
+    const client = new SSDPClient();
+    const found: any[] = [];
+
+    client.on("response", (headers: any, statusCode: number, rinfo: any) => {
+      found.push({
         id: headers.USN || rinfo.address,
-        name: headers.SERVER || "Unknown Device",
+        name: headers.SERVER || headers.ST || "SSDP Device",
         protocol: "ssdp",
         ip: rinfo.address,
-        port: rinfo.port,
+        port: headers.LOCATION ? new URL(headers.LOCATION).port : undefined,
+        type: headers.ST || "unknown",
+        status: "found",
+        icon: DEFAULT_ICON,
       });
     });
 
-    ssdp.search("ssdp:all");
+    client.search("ssdp:all");
 
-    // Wait 5 seconds for SSDP responses
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-    ssdp.stop();
+    setTimeout(() => {
+      client.stop();
+      resolve(found);
+    }, timeout);
+  });
+}
 
-    // --------- MQTT discovery (Smart switches, Zigbee gateways, etc) ---------
-    const mqttClient = mqtt.connect("mqtt://localhost:1883"); // replace with your broker
-    await new Promise<void>((resolve, reject) => {
-      mqttClient.on("connect", () => {
-        mqttClient.subscribe("ochiga/+/device/+/announce", { qos: 1 }, (err) => {
-          if (err) reject(err);
+/* -------------------------------------------------------
+    MQTT DISCOVERY (smart switches, hubs, zigbee gateways)
+------------------------------------------------------- */
+async function mqttDiscover(timeout = 3000) {
+  return new Promise((resolve) => {
+    const found: any[] = [];
+    const mqttClient = mqtt.connect("mqtt://localhost:1883");
+
+    mqttClient.on("connect", () => {
+      mqttClient.subscribe("ochiga/+/device/+/announce", { qos: 1 });
+    });
+
+    mqttClient.on("message", (topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        found.push({
+          id: data.id,
+          name: data.name,
+          protocol: "mqtt",
+          ip: data.ip || "unknown",
+          type: data.type || "device",
+          status: "found",
+          icon: data.icon || DEFAULT_ICON,
         });
-      });
-
-      mqttClient.on("message", (topic, message) => {
-        try {
-          const data = JSON.parse(message.toString());
-          discoveredDevices.push({
-            id: data.id,
-            name: data.name,
-            protocol: "mqtt",
-            ...data,
-          });
-        } catch (err) {
-          console.warn("Failed to parse MQTT message", err);
-        }
-      });
-
-      // Wait 5 seconds then end MQTT
-      setTimeout(() => {
-        mqttClient.end(true);
-        resolve();
-      }, 5000);
+      } catch (err) {
+        console.warn("MQTT parse error:", err);
+      }
     });
 
-    if (discoveredDevices.length === 0) {
+    setTimeout(() => {
+      mqttClient.end(true);
+      resolve(found);
+    }, timeout);
+  });
+}
+
+/* -------------------------------------------------------
+    MAIN DISCOVERY ROUTE
+------------------------------------------------------- */
+router.get("/discover", requireAuth, async (req, res) => {
+  try {
+    console.log("🔍 Starting Discovery Scan...");
+
+    // 1. SSDP SCAN
+    const ssdp = await ssdpDiscover();
+
+    // 2. MQTT DEVICE ANNOUNCE
+    const mqttResults = await mqttDiscover();
+
+    // 3. PING SWEEP FALLBACK
+    const pingResults = await pingSweep(80); // 80 = faster scan
+
+    const all = [...ssdp, ...mqttResults, ...pingResults];
+
+    if (!all.length) {
       return res.status(404).json({ message: "No devices found" });
     }
 
-    res.json({ devices: discoveredDevices });
+    return res.json({ devices: all });
   } catch (err: any) {
     console.error("Device discovery error:", err);
-    res.status(500).json({ error: "Device discovery failed", details: err.message });
+    return res
+      .status(500)
+      .json({ error: "Discovery failed", details: err.message });
   }
 });
 
-/** GET /devices - list devices */
+/* -------------------------------------------------------
+    LIST DEVICES SAVED IN DATABASE
+------------------------------------------------------- */
 router.get("/", requireAuth, async (req, res) => {
-  const estateId = req.query.estateId as string | undefined;
-  try {
-    const { data, error } = estateId
-      ? await supabaseAdmin.from("devices").select("*").eq("estate_id", estateId)
-      : await supabaseAdmin.from("devices").select("*");
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const estateId = req.query.estateId as string;
+
+  const { data, error } = await supabaseAdmin
+    .from("devices")
+    .select("*")
+    .eq("estate_id", estateId || null);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
-/** POST /devices - create device (estate role) */
-router.post("/", requireAuth, requireRole("estate"), async (req, res) => {
-  const { estate_id, name, type, metadata } = req.body;
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("devices")
-      .insert([{ estate_id, name, type, metadata }])
-      .select()
-      .single();
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+/* -------------------------------------------------------
+    CONNECT / PAIR DEVICE
+------------------------------------------------------- */
+router.post("/connect/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const estate_id = req.query.estateId;
 
-/** POST /devices/:id/action - trigger a device action */
-router.post("/:id/action", requireAuth, async (req, res) => {
-  const id = req.params.id;
-  const { action, params } = req.body;
-  console.log("Trigger device", id, action, params);
-  res.json({ ok: true, message: `Action ${action} queued for device ${id}` });
+  const { data, error } = await supabaseAdmin
+    .from("devices")
+    .insert([
+      {
+        estate_id,
+        external_id: id,
+        name: `Device ${id}`,
+        type: "iot",
+        status: "connected",
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+
+  return res.json({ message: "Device connected", device: data });
 });
 
 export default router;
