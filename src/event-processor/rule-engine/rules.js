@@ -74,3 +74,11 @@ export const rules = [
     }),
   },
 ];
+
+// -------------------------------------------------------------
+// Initialize Rule Engine (for index.ts)
+// -------------------------------------------------------------
+export function initRuleEngine() {
+  console.log(`✅ Rule Engine initialized with ${rules.length} rules`);
+  // In future, load rules into memory, connect to database, or precompute indexes
+}
