@@ -7,7 +7,7 @@ import onboardingRoutes from "./routes/onboarding";
 
 // 👉 SERVICES
 import { startEventProcessor } from "./event-processor/eventProcessor";
-import { initRuleEngine } from "./services/ruleEngine";
+import { initRuleEngine } from "./event-processor/rule-engine/rules";
 
 // ----------------------------------------------------
 // ROUTE MOUNTING
