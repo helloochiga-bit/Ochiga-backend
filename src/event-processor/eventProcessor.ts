@@ -17,7 +17,7 @@ export interface Suggestion {
   status?: "pending" | "accepted" | "dismissed" | "executed";
 }
 
-// Temporary stub function — replace later with real AI logic
+// Process a single event into a suggestion
 export function processEvent(event: Event): Suggestion | null {
   console.log("Processing event:", event);
 
@@ -30,4 +30,12 @@ export function processEvent(event: Event): Suggestion | null {
     status: "pending",
     payload: {},
   };
+}
+
+// Start the background event processor
+export function startEventProcessor() {
+  console.log("Event Processor started");
+
+  // Example: could hook into device events or queues later
+  // setInterval(() => console.log("Polling for events..."), 5000);
 }
