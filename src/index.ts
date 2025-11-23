@@ -6,7 +6,7 @@ import estatesRoutes from "./routes/estates";
 import onboardingRoutes from "./routes/onboarding";
 
 // 👉 SERVICES
-import { startEventProcessor } from "./services/eventProcessor";
+import { startEventProcessor } from "./event-processor/eventProcessor";
 import { initRuleEngine } from "./services/ruleEngine";
 
 // ----------------------------------------------------
