@@ -6,7 +6,7 @@
  * - Handles user Accept / Dismiss action
  */
 
-import { supabase } from "../lib/supabase";
+import { supabaseAdmin as supabase } from "../supabase/supabaseClient"; // updated import
 import { io } from "../server"; // imported from central socket instance
 
 export class DecisionEngine {
