@@ -22,8 +22,8 @@ app.use("/auth/onboard", onboardingRoutes);
   try {
     console.log("⚡ Initializing background services...");
 
-    // Start MQTT event processor
-    await startEventProcessor();
+    // Start event processor
+    await startEventProcessor(); // now works even if you later make it async
 
     // Initialize rule engine in memory
     initRuleEngine();
