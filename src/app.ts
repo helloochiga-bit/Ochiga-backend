@@ -12,13 +12,13 @@ import devicesRoutes from "./routes/devices";
 
 const app = express();
 
-// ─── Middleware ───────────────────────────────
-app.use(helmet()); // Security headers
-app.use(cors());   // Allow cross-origin requests
-app.use(express.json()); // Parse JSON bodies
-app.use(morgan("dev"));  // HTTP request logging
+// ─── Global Middleware ───────────────────────────────
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+app.use(morgan("dev"));
 
-// ─── Health Check ────────────────────────────
+// ─── Health Check ───────────────────────────────
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -27,21 +27,36 @@ app.get("/health", (req, res) => {
   });
 });
 
-// ─── Mount Routes ────────────────────────────
+// ─── Route Mounting ───────────────────────────────
 app.use("/auth", authRoutes);
 app.use("/estates", estatesRoutes);
 app.use("/residents", residentsRoutes);
 app.use("/devices", devicesRoutes);
 
-// ─── 404 Handler ─────────────────────────────
+// ─── 404 Handler ───────────────────────────────
 app.use((req, res) => {
-  res.status(404).json({ status: "error", message: "Route not found" });
+  res.status(404).json({
+    status: "error",
+    message: "Route not found",
+    path: req.originalUrl,
+  });
 });
 
-// ─── Global Error Handler ────────────────────
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ status: "error", message: "Internal Server Error", error: err.message });
-});
+// ─── Global Error Handler ───────────────────────────────
+app.use(
+  (
+    err: any,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    console.error("🔥 GLOBAL ERROR HANDLER:", err.stack);
+    res.status(500).json({
+      status: "error",
+      message: "Internal Server Error",
+      error: err.message,
+    });
+  }
+);
 
 export default app;
