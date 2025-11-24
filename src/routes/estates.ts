@@ -6,29 +6,34 @@ import { requireRole } from "../middleware/roles";
 
 const router = express.Router();
 
-/** GET /estates - list (admin/estate) */
+/** GET /estates — list all estates */
 router.get("/", requireAuth, async (req, res) => {
   const { data, error } = await supabaseAdmin.from("estates").select("*");
+
   if (error) return res.status(500).json({ error: error.message });
+
   res.json(data);
 });
 
-/** POST /estates - create estate (estate role or admin) */
+/** POST /estates — create estate (admin/estate only) */
 router.post("/", requireAuth, requireRole("estate"), async (req, res) => {
-  const { name, address } = req.body;
+  const { name, address, lat, lng } = req.body;
+
   const { data, error } = await supabaseAdmin
     .from("estates")
-    .insert([{ name, address }])
+    .insert([{ name, address, lat, lng }])
     .select()
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+
   res.json(data);
 });
 
 /** GET /estates/:id */
 router.get("/:id", requireAuth, async (req, res) => {
   const id = req.params.id;
+
   const { data, error } = await supabaseAdmin
     .from("estates")
     .select("*")
@@ -36,22 +41,22 @@ router.get("/:id", requireAuth, async (req, res) => {
     .single();
 
   if (error) return res.status(404).json({ error: "Not found" });
+
   res.json(data);
 });
 
-/* -------------------------------------------- */
-/*   NEW: CREATE HOME + RESIDENT ACCOUNT        */
-/* -------------------------------------------- */
-
+/* -------------------------------------------------------------
+   CREATE HOME + RESIDENT (Estate Owner only)
+-------------------------------------------------------------- */
 router.post("/create-home", requireAuth, requireRole("estate"), async (req, res) => {
   try {
     const dto = req.body;
 
-    // generate resident password
+    // 1 — Generate resident password
     const tempPassword = "OC-" + Math.floor(10000 + Math.random() * 90000);
     const hashedPw = await bcrypt.hash(tempPassword, 10);
 
-    /** 1️⃣ Create resident user in users table */
+    // 2 — Create resident account
     const { data: resident, error: residentErr } = await supabaseAdmin
       .from("users")
       .insert({
@@ -60,6 +65,7 @@ router.post("/create-home", requireAuth, requireRole("estate"), async (req, res)
         role: "resident",
         estate_id: dto.estateId,
         full_name: dto.residentName,
+        phone: dto.residentPhone || null,
       })
       .select()
       .single();
@@ -72,7 +78,7 @@ router.post("/create-home", requireAuth, requireRole("estate"), async (req, res)
       });
     }
 
-    /** 2️⃣ Save home */
+    // 3 — Create home
     const { data: home, error: homeErr } = await supabaseAdmin
       .from("homes")
       .insert({
@@ -86,6 +92,10 @@ router.post("/create-home", requireAuth, requireRole("estate"), async (req, res)
         waterMeter: dto.waterMeter,
         internetId: dto.internetId,
         gateCode: dto.gateCode,
+
+        // NEW: geolocation support
+        lat: dto.lat || null,
+        lng: dto.lng || null,
       })
       .select()
       .single();
