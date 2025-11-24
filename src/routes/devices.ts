@@ -5,15 +5,17 @@ import mqtt from "mqtt";
 import ping from "ping";
 import { networkInterfaces } from "os";
 import { supabaseAdmin } from "../supabase/client";
+import { io } from "../server"; 
+import { calculateDistance } from "../utils/geoMath"; // <-- NEW
 
 const router = express.Router();
 
 const DEFAULT_ICON =
   "https://ochiga-assets.s3.amazonaws.com/device/default-device.png";
 
-// --------------------
-// Types
-// --------------------
+/* ----------------------------------------------------
+ * TYPES
+ * ---------------------------------------------------- */
 type Device = {
   id: string;
   name: string;
@@ -22,11 +24,17 @@ type Device = {
   type?: string;
   status: string;
   icon: string;
+
+  // NEW GEO FIELDS
+  latitude?: number;
+  longitude?: number;
+  installationPoint?: string;
+  lastLocationUpdate?: string;
 };
 
-// --------------------
-// LOCAL NETWORK INFO
-// --------------------
+/* ----------------------------------------------------
+ * GET LOCAL IP
+ * ---------------------------------------------------- */
 function getLocalNetworkInfo() {
   const nets = networkInterfaces();
   for (const name of Object.keys(nets)) {
@@ -39,9 +47,9 @@ function getLocalNetworkInfo() {
   return {};
 }
 
-// --------------------
-// PING SWEEP
-// --------------------
+/* ----------------------------------------------------
+ * PING SWEEP
+ * ---------------------------------------------------- */
 async function pingSweep(limit = 254): Promise<Device[]> {
   const found: Device[] = [];
   const info = getLocalNetworkInfo();
@@ -74,29 +82,26 @@ async function pingSweep(limit = 254): Promise<Device[]> {
   return found;
 }
 
-// --------------------
-// SSDP DISCOVERY
-// --------------------
+/* ----------------------------------------------------
+ * SSDP
+ * ---------------------------------------------------- */
 async function ssdpDiscover(timeout = 3500): Promise<Device[]> {
   return new Promise((resolve) => {
     const client = new SSDPClient();
     const found: Device[] = [];
 
-    client.on(
-      "response",
-      (headers: any, statusCode: number, rinfo: any) => {
-        found.push({
-          id: headers.USN || rinfo.address,
-          name: headers.SERVER || headers.ST || "SSDP Device",
-          protocol: "ssdp",
-          ip: rinfo.address,
-          port: headers.LOCATION ? new URL(headers.LOCATION).port : undefined,
-          type: headers.ST || "unknown",
-          status: "found",
-          icon: DEFAULT_ICON,
-        });
-      }
-    );
+    client.on("response", (headers: any, _statusCode: number, rinfo: any) => {
+      found.push({
+        id: headers.USN || rinfo.address,
+        name: headers.SERVER || headers.ST || "SSDP Device",
+        protocol: "ssdp",
+        ip: rinfo.address,
+        port: headers.LOCATION ? new URL(headers.LOCATION).port : undefined,
+        type: headers.ST || "unknown",
+        status: "found",
+        icon: DEFAULT_ICON,
+      });
+    });
 
     client.search("ssdp:all");
 
@@ -107,9 +112,9 @@ async function ssdpDiscover(timeout = 3500): Promise<Device[]> {
   });
 }
 
-// --------------------
-// MQTT DISCOVERY
-// --------------------
+/* ----------------------------------------------------
+ * MQTT DEVICE DISCOVERY
+ * ---------------------------------------------------- */
 async function mqttDiscover(timeout = 3000): Promise<Device[]> {
   return new Promise((resolve) => {
     const found: Device[] = [];
@@ -143,9 +148,9 @@ async function mqttDiscover(timeout = 3000): Promise<Device[]> {
   });
 }
 
-// --------------------
-// MAIN DISCOVERY ROUTE
-// --------------------
+/* ----------------------------------------------------
+ * MAIN DISCOVERY ROUTE
+ * ---------------------------------------------------- */
 router.get("/discover", requireAuth, async (req, res) => {
   try {
     console.log("🔍 [DEVICE SCAN] Scan triggered!");
@@ -177,9 +182,9 @@ router.get("/discover", requireAuth, async (req, res) => {
   }
 });
 
-// --------------------
-// LIST DEVICES IN DB
-// --------------------
+/* ----------------------------------------------------
+ * LIST DEVICES IN DB
+ * ---------------------------------------------------- */
 router.get("/", requireAuth, async (req, res) => {
   const estateId = req.query.estateId as string;
 
@@ -192,9 +197,9 @@ router.get("/", requireAuth, async (req, res) => {
   res.json(data);
 });
 
-// --------------------
-// CONNECT DEVICE
-// --------------------
+/* ----------------------------------------------------
+ * CONNECT DEVICE
+ * ---------------------------------------------------- */
 router.post("/connect/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
   const estate_id = req.query.estateId;
@@ -218,6 +223,69 @@ router.post("/connect/:id", requireAuth, async (req, res) => {
   console.log(`🔌 [DEVICE CONNECT] Device ${id} connected to estate ${estate_id}`);
 
   return res.json({ message: "Device connected", device: data });
+});
+
+/* ----------------------------------------------------
+ * NEW: UPDATE DEVICE LOCATION
+ * ---------------------------------------------------- */
+router.post("/:deviceId/location", requireAuth, async (req, res) => {
+  const { deviceId } = req.params;
+  const { lat, lng, installationPoint } = req.body;
+
+  const { data, error } = await supabaseAdmin
+    .from("devices")
+    .update({
+      latitude: lat,
+      longitude: lng,
+      installationPoint,
+      lastLocationUpdate: new Date().toISOString(),
+    })
+    .eq("id", deviceId)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ error: error.message });
+
+  // 🔥 Broadcast live to map
+  io.emit("device:location:update", {
+    id: deviceId,
+    lat,
+    lng,
+    installationPoint,
+  });
+
+  return res.json({
+    message: "Location updated",
+    device: data,
+  });
+});
+
+/* ----------------------------------------------------
+ * NEW: GET NEARBY DEVICES
+ * ---------------------------------------------------- */
+router.get("/near", requireAuth, async (req, res) => {
+  const { lat, lng, radius = 100 } = req.query;
+
+  const { data, error } = await supabaseAdmin
+    .from("devices")
+    .select("*");
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const filtered = data
+    .filter((d: any) => d.latitude && d.longitude)
+    .map((d: any) => ({
+      ...d,
+      distance: calculateDistance(
+        Number(lat),
+        Number(lng),
+        d.latitude,
+        d.longitude
+      ),
+    }))
+    .filter((d: any) => d.distance <= Number(radius));
+
+  return res.json(filtered);
 });
 
 export default router;
