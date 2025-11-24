@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { supabase } from "../config/supabase";
+import { supabase } from "../supabase/supabaseClient";
 
 export class AuthService {
   async login(data: { usernameOrEmail: string; password: string }) {
