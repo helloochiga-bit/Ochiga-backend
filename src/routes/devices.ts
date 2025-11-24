@@ -6,6 +6,7 @@ import mqtt from "mqtt";
 import ping from "ping";
 import { networkInterfaces } from "os";
 import { supabaseAdmin } from "../supabase/client";
+import { io } from "../server"; // <-- Import Socket.IO instance
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ const DEFAULT_ICON =
 type Device = {
   id: string;
   name: string;
-  supportedProtocols: string[]; // ["mqtt","wifi","zigbee","zwave","ble"]
+  supportedProtocols: string[];
   currentProtocol: string;
   ip?: string;
   port?: string;
@@ -28,6 +29,7 @@ type Device = {
   signalStrength?: number;
   latency?: number;
   reliability?: number;
+  estate_id?: string; // optional for emitting to correct estate
 };
 
 // -------------------------------------------------
@@ -43,6 +45,23 @@ function getLocalNetworkInfo() {
     }
   }
   return {};
+}
+
+// -------------------------------------------------
+// REAL-TIME EMIT
+// -------------------------------------------------
+function emitDeviceUpdate(device: Device) {
+  if (!device.estate_id) return;
+  io.to(`estate:${device.estate_id}`).emit("device:update", {
+    deviceId: device.id,
+    name: device.name,
+    status: device.status,
+    currentProtocol: device.currentProtocol,
+    signalStrength: device.signalStrength,
+    latency: device.latency,
+    reliability: device.reliability,
+    ip: device.ip,
+  });
 }
 
 // -------------------------------------------------
@@ -94,15 +113,16 @@ async function evaluateConnectivity(device: Device) {
     });
   }
 
-  // Sort descending by overall score
   scores.sort((a, b) => b.overall - a.overall);
-
-  // Best protocol
   const best = scores[0];
+
   device.currentProtocol = best.protocol;
   device.signalStrength = best.signalStrength;
   device.latency = best.latency;
   device.reliability = best.reliability;
+
+  // Emit real-time update after scoring
+  emitDeviceUpdate(device);
 
   return device;
 }
@@ -113,16 +133,13 @@ async function evaluateConnectivity(device: Device) {
 async function pingSweep(limit = 254): Promise<Device[]> {
   const found: Device[] = [];
   const info = getLocalNetworkInfo();
-
   if (!info.address) return found;
-
   const parts = info.address.split(".");
   const base = parts.slice(0, 3).join(".");
 
   const jobs = Array.from({ length: limit }).map(async (_, i) => {
     const ip = `${base}.${i + 1}`;
     const res = await ping.promise.probe(ip, { timeout: 2 });
-
     if (res.alive) {
       const device: Device = {
         id: ip,
@@ -185,7 +202,7 @@ async function mqttDiscover(timeout = 3000): Promise<Device[]> {
       mqttClient.subscribe("ochiga/+/device/+/announce", { qos: 1 });
     });
 
-    mqttClient.on("message", async (topic, message) => {
+    mqttClient.on("message", async (_topic, message) => {
       try {
         const data = JSON.parse(message.toString());
         const device: Device = {
@@ -217,11 +234,9 @@ async function mqttDiscover(timeout = 3000): Promise<Device[]> {
 router.get("/discover", requireAuth, async (_req, res) => {
   try {
     console.log("🔎 Device discovery started...");
-
     const ssdp = await ssdpDiscover();
     const mqttResults = await mqttDiscover();
     const pingResults = await pingSweep(80);
-
     const all: Device[] = [...ssdp, ...mqttResults, ...pingResults];
 
     if (all.length === 0) {
@@ -237,10 +252,7 @@ router.get("/discover", requireAuth, async (_req, res) => {
     res.json({ devices: all });
   } catch (err: any) {
     console.error("[Device Discovery Error]:", err);
-    res.status(500).json({
-      error: "Discovery failed",
-      details: err.message,
-    });
+    res.status(500).json({ error: "Discovery failed", details: err.message });
   }
 });
 
@@ -249,14 +261,12 @@ router.get("/discover", requireAuth, async (_req, res) => {
 // -------------------------------------------------
 router.get("/", requireAuth, async (req, res) => {
   const estateId = req.query.estateId as string;
-
   const { data, error } = await supabaseAdmin
     .from("devices")
     .select("*")
     .eq("estate_id", estateId || null);
 
   if (error) return res.status(500).json({ error: error.message });
-
   res.json(data);
 });
 
@@ -283,8 +293,10 @@ router.post("/connect/:id", requireAuth, async (req, res) => {
 
   if (error) return res.status(400).json({ error: error.message });
 
-  console.log(`🔌 Device ${id} connected to estate ${estate_id}`);
+  // Emit real-time update
+  emitDeviceUpdate({ ...data, estate_id: estate_id as string });
 
+  console.log(`🔌 Device ${id} connected to estate ${estate_id}`);
   res.json({ message: "Device connected", device: data });
 });
 
