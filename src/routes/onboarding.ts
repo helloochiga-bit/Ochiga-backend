@@ -4,7 +4,6 @@ import bcrypt from "bcrypt";
 
 const router = express.Router();
 
-// COMPLETE ONBOARDING
 router.post("/:token", async (req, res) => {
   const token = req.params.token;
   const { username, password } = req.body;
@@ -13,7 +12,7 @@ router.post("/:token", async (req, res) => {
     return res.status(400).json({ error: "username and password required" });
   }
 
-  // 1. Check token validity
+  // 1️⃣ Check token validity
   const { data: tokenRow, error: tokenError } = await supabaseAdmin
     .from("onboarding_tokens")
     .select("*")
@@ -27,15 +26,15 @@ router.post("/:token", async (req, res) => {
 
   const userId = tokenRow.user_id;
 
-  // 2. Hash the new password
+  // 2️⃣ Hash password
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // 3. Update user account
+  // 3️⃣ Update user account
   const { error: updateError } = await supabaseAdmin
     .from("users")
     .update({
       username,
-      password: hashedPassword
+      password: hashedPassword,
     })
     .eq("id", userId);
 
@@ -43,14 +42,14 @@ router.post("/:token", async (req, res) => {
     return res.status(500).json({ error: updateError.message });
   }
 
-  // 4. Mark onboarding token as used
+  // 4️⃣ Mark token as used
   await supabaseAdmin
     .from("onboarding_tokens")
     .update({ used: true })
     .eq("id", tokenRow.id);
 
   return res.json({
-    message: "Onboarding complete. User activated successfully."
+    message: "Onboarding complete. User activated successfully.",
   });
 });
 
