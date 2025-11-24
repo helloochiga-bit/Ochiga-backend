@@ -38,10 +38,11 @@ export const io = new IOServer(httpServer, {
   cors: { origin: true, credentials: true },
 });
 
-// Socket.IO — estate-specific channels
+// Socket.IO — estate-specific and user-specific channels
 io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id);
 
+  // Estate subscription
   socket.on("subscribe:estate", (estateId: string) => {
     socket.join(`estate:${estateId}`);
   });
@@ -49,10 +50,19 @@ io.on("connection", (socket) => {
   socket.on("unsubscribe:estate", (estateId: string) => {
     socket.leave(`estate:${estateId}`);
   });
+
+  // User subscription (for real-time notifications)
+  socket.on("subscribe:user", (userId: string) => {
+    socket.join(`user:${userId}`);
+  });
+
+  socket.on("unsubscribe:user", (userId: string) => {
+    socket.leave(`user:${userId}`);
+  });
 });
 
 // ─── Start Server ────────────────────────────
-const PORT = process.env.PORT ? Number(process.env.PORT) : 5000; // updated default to 5000
+const PORT = process.env.PORT ? Number(process.env.PORT) : 5000;
 
 httpServer.listen(PORT, async () => {
   console.log(`HTTP + WS server listening on port ${PORT}`);
