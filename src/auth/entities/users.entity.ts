@@ -1,32 +1,28 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column
-} from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
 
 @Entity("users")
 export class Users {
   @PrimaryGeneratedColumn("uuid")
-  id: string;
+  id!: string; // Use "!" to tell TS that TypeORM will assign the value
 
   @Column({ unique: true })
-  email: string;
+  email!: string;
 
   @Column({ unique: true, nullable: true })
-  username: string;
+  username!: string | null;
 
   @Column()
-  password: string;
+  password!: string;
 
   @Column({ default: false })
-  isResident: boolean;
+  isResident!: boolean;
 
   @Column({ default: false })
-  isEstateOwner: boolean;
+  isEstateOwner!: boolean;
 
   @Column({ nullable: true })
-  homeId: string;
+  homeId!: string | null;
 
   @Column({ nullable: true })
-  estateId: string;
+  estateId!: string | null;
 }
