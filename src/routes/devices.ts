@@ -1,7 +1,5 @@
-// src/routes/devices.ts
 import express from "express";
 import { requireAuth } from "../middleware/auth";
-import { requireRole } from "../middleware/roles";
 import { Client as SSDPClient } from "node-ssdp";
 import mqtt from "mqtt";
 import ping from "ping";
@@ -13,9 +11,22 @@ const router = express.Router();
 const DEFAULT_ICON =
   "https://ochiga-assets.s3.amazonaws.com/device/default-device.png";
 
-/* -------------------------------------------------------
-    GET LOCAL NETWORK INFO
-------------------------------------------------------- */
+// --------------------
+// Types
+// --------------------
+type Device = {
+  id: string;
+  name: string;
+  protocol: string;
+  ip: string;
+  type?: string;
+  status: string;
+  icon: string;
+};
+
+// --------------------
+// LOCAL NETWORK INFO
+// --------------------
 function getLocalNetworkInfo() {
   const nets = networkInterfaces();
   for (const name of Object.keys(nets)) {
@@ -28,11 +39,11 @@ function getLocalNetworkInfo() {
   return {};
 }
 
-/* -------------------------------------------------------
-    SIMPLE PING SWEEP — fallback when SSDP fails
-------------------------------------------------------- */
-async function pingSweep(limit = 254) {
-  const found: any[] = [];
+// --------------------
+// PING SWEEP
+// --------------------
+async function pingSweep(limit = 254): Promise<Device[]> {
+  const found: Device[] = [];
   const info = getLocalNetworkInfo();
 
   if (!info.address) return found;
@@ -63,26 +74,29 @@ async function pingSweep(limit = 254) {
   return found;
 }
 
-/* -------------------------------------------------------
-    SSDP DISCOVERY
-------------------------------------------------------- */
-async function ssdpDiscover(timeout = 3500) {
+// --------------------
+// SSDP DISCOVERY
+// --------------------
+async function ssdpDiscover(timeout = 3500): Promise<Device[]> {
   return new Promise((resolve) => {
     const client = new SSDPClient();
-    const found: any[] = [];
+    const found: Device[] = [];
 
-    client.on("response", (headers: any, statusCode: number, rinfo: any) => {
-      found.push({
-        id: headers.USN || rinfo.address,
-        name: headers.SERVER || headers.ST || "SSDP Device",
-        protocol: "ssdp",
-        ip: rinfo.address,
-        port: headers.LOCATION ? new URL(headers.LOCATION).port : undefined,
-        type: headers.ST || "unknown",
-        status: "found",
-        icon: DEFAULT_ICON,
-      });
-    });
+    client.on(
+      "response",
+      (headers: any, statusCode: number, rinfo: any) => {
+        found.push({
+          id: headers.USN || rinfo.address,
+          name: headers.SERVER || headers.ST || "SSDP Device",
+          protocol: "ssdp",
+          ip: rinfo.address,
+          port: headers.LOCATION ? new URL(headers.LOCATION).port : undefined,
+          type: headers.ST || "unknown",
+          status: "found",
+          icon: DEFAULT_ICON,
+        });
+      }
+    );
 
     client.search("ssdp:all");
 
@@ -93,12 +107,12 @@ async function ssdpDiscover(timeout = 3500) {
   });
 }
 
-/* -------------------------------------------------------
-    MQTT DISCOVERY
-------------------------------------------------------- */
-async function mqttDiscover(timeout = 3000) {
+// --------------------
+// MQTT DISCOVERY
+// --------------------
+async function mqttDiscover(timeout = 3000): Promise<Device[]> {
   return new Promise((resolve) => {
-    const found: any[] = [];
+    const found: Device[] = [];
     const mqttClient = mqtt.connect("mqtt://localhost:1883");
 
     mqttClient.on("connect", () => {
@@ -129,27 +143,18 @@ async function mqttDiscover(timeout = 3000) {
   });
 }
 
-/* -------------------------------------------------------
-    MAIN DISCOVERY ROUTE
-------------------------------------------------------- */
+// --------------------
+// MAIN DISCOVERY ROUTE
+// --------------------
 router.get("/discover", requireAuth, async (req, res) => {
   try {
     console.log("🔍 [DEVICE SCAN] Scan triggered!");
 
-    // --- DEBUG: Show headers to check token ---
-    console.log("Headers received:", req.headers);
-    console.log("Authorization header:", req.headers.authorization);
-
-    // 1. SSDP SCAN
     const ssdp = await ssdpDiscover();
-
-    // 2. MQTT DEVICE ANNOUNCE
     const mqttResults = await mqttDiscover();
+    const pingResults = await pingSweep(80);
 
-    // 3. PING SWEEP FALLBACK
-    const pingResults = await pingSweep(80); // 80 = faster scan
-
-    const all = [...ssdp, ...mqttResults, ...pingResults];
+    const all: Device[] = [...ssdp, ...mqttResults, ...pingResults];
 
     if (all.length === 0) {
       console.log("🔍 [DEVICE SCAN] No devices found.");
@@ -158,19 +163,23 @@ router.get("/discover", requireAuth, async (req, res) => {
 
     console.log(`🔍 [DEVICE SCAN] ${all.length} device(s) discovered:`);
     all.forEach((d) =>
-      console.log(`- ${d.name} (${d.type || d.protocol}) at ${d.ip} [${d.protocol}]`)
+      console.log(
+        `- ${d.name} (${d.type || d.protocol}) at ${d.ip} [${d.protocol}]`
+      )
     );
 
     return res.json({ devices: all });
   } catch (err: any) {
     console.error("[DEVICE SCAN] Discovery error:", err);
-    return res.status(500).json({ error: "Discovery failed", details: err.message });
+    return res
+      .status(500)
+      .json({ error: "Discovery failed", details: err.message });
   }
 });
 
-/* -------------------------------------------------------
-    LIST DEVICES SAVED IN DATABASE
-------------------------------------------------------- */
+// --------------------
+// LIST DEVICES IN DB
+// --------------------
 router.get("/", requireAuth, async (req, res) => {
   const estateId = req.query.estateId as string;
 
@@ -183,9 +192,9 @@ router.get("/", requireAuth, async (req, res) => {
   res.json(data);
 });
 
-/* -------------------------------------------------------
-    CONNECT / PAIR DEVICE
-------------------------------------------------------- */
+// --------------------
+// CONNECT DEVICE
+// --------------------
 router.post("/connect/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
   const estate_id = req.query.estateId;
