@@ -5,6 +5,8 @@ create table if not exists estates (
   id uuid default gen_random_uuid() primary key,
   name text not null,
   address text,
+  lat numeric,         -- new: latitude for geolocation
+  lng numeric,         -- new: longitude for geolocation
   created_at timestamptz default now()
 );
 
@@ -15,13 +17,41 @@ create table if not exists users (
   id uuid default gen_random_uuid() primary key,
   email text unique not null,
   username text,
-  password_hash text,
+  full_name text,
+  password text,       -- renamed to match current insert code
   role text not null default 'resident', -- 'estate', 'resident', 'admin'
   estate_id uuid references estates(id) on delete set null,
+  home_id uuid references homes(id) on delete set null,
+  isResident boolean default false,
+  isEstateOwner boolean default false,
   created_at timestamptz default now()
 );
 
 create index if not exists idx_users_estate on users(estate_id);
+create index if not exists idx_users_home on users(home_id);
+
+---------------------------------------------------------------------
+-- Homes
+---------------------------------------------------------------------
+create table if not exists homes (
+  id uuid default gen_random_uuid() primary key,
+  estate_id uuid references estates(id) on delete cascade,
+  resident_id uuid references users(id) on delete set null,
+  name text not null,
+  unit text,
+  block text,
+  description text,
+  electricityMeter text,
+  waterMeter text,
+  internetId text,
+  gateCode text,
+  lat numeric,         -- optional geolocation for the home
+  lng numeric,
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_homes_estate on homes(estate_id);
+create index if not exists idx_homes_resident on homes(resident_id);
 
 ---------------------------------------------------------------------
 -- Devices
@@ -29,11 +59,20 @@ create index if not exists idx_users_estate on users(estate_id);
 create table if not exists devices (
   id uuid default gen_random_uuid() primary key,
   estate_id uuid references estates(id) on delete cascade,
+  home_id uuid references homes(id) on delete set null,   -- devices can belong to a home
   name text not null,
   type text,
+  external_id text,       -- for device UUIDs from discovery
+  status text default 'offline',
   metadata jsonb default '{}'::jsonb,
+  lat numeric,           -- device geolocation
+  lng numeric,
+  icon text,
   created_at timestamptz default now()
 );
+
+create index if not exists idx_devices_estate on devices(estate_id);
+create index if not exists idx_devices_home on devices(home_id);
 
 ---------------------------------------------------------------------
 -- Suggestions (AI decisions waiting for user action)
@@ -56,18 +95,38 @@ create index if not exists idx_suggestions_device on suggestions(device_id);
 create index if not exists idx_suggestions_status on suggestions(status);
 
 ---------------------------------------------------------------------
--- 🚀 Tours (Estate Tour & Resident Tour)
+-- Visitors
+---------------------------------------------------------------------
+create table if not exists visitors (
+  id uuid default gen_random_uuid() primary key,
+  full_name text,
+  email text,
+  phone text,
+  estate_id uuid references estates(id) on delete cascade,
+  home_id uuid references homes(id) on delete set null,
+  current_lat numeric,
+  current_lng numeric,
+  status text default 'idle', -- idle | visiting | left
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_visitors_estate on visitors(estate_id);
+create index if not exists idx_visitors_home on visitors(home_id);
+
+---------------------------------------------------------------------
+-- Tours (Estate Tour & Resident Tour)
 ---------------------------------------------------------------------
 create table if not exists tours (
   id uuid default gen_random_uuid() primary key,
-  name text not null,                     -- e.g. 'estate_onboarding', 'resident_onboarding'
+  name text not null,
   role text not null,                     -- which role should receive this tour
   is_active boolean default true,
   created_at timestamptz default now()
 );
 
 ---------------------------------------------------------------------
--- 🚀 Tour Steps (Each step inside a tour)
+-- Tour Steps (Each step inside a tour)
 ---------------------------------------------------------------------
 create table if not exists tour_steps (
   id uuid default gen_random_uuid() primary key,
@@ -83,7 +142,7 @@ create table if not exists tour_steps (
 create index if not exists idx_tour_steps_tour on tour_steps(tour_id);
 
 ---------------------------------------------------------------------
--- 🚀 Track User Progress in Tours
+-- Track User Progress in Tours
 ---------------------------------------------------------------------
 create table if not exists user_tour_progress (
   id uuid default gen_random_uuid() primary key,
@@ -98,3 +157,16 @@ create table if not exists user_tour_progress (
 
 create index if not exists idx_user_tour on user_tour_progress(user_id);
 create index if not exists idx_user_tour_tour on user_tour_progress(tour_id);
+
+---------------------------------------------------------------------
+-- Onboarding tokens
+---------------------------------------------------------------------
+create table if not exists onboarding_tokens (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references users(id) on delete cascade,
+  token text not null,
+  used boolean default false,
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_onboarding_tokens_user on onboarding_tokens(user_id);
