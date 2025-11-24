@@ -6,15 +6,47 @@
  * - Handles user Accept / Dismiss action
  */
 
-import { supabaseAdmin as supabase } from "../supabase/supabaseClient"; // updated import
-import { io } from "../server"; // imported from central socket instance
+import { supabaseAdmin as supabase } from "../supabase/supabaseClient";
+import { io } from "../server";
 
+// -----------------------------
+// TYPES
+// -----------------------------
+export interface SuggestionPayload {
+  [key: string]: any;
+}
+
+export interface SuggestionInput {
+  estate_id: string;
+  device_id: string;
+  rule_id: string;
+  message: string;
+  action?: string;
+  payload?: SuggestionPayload;
+}
+
+export interface SuggestionData extends SuggestionInput {
+  id: string;
+  status: "pending" | "accepted" | "dismissed";
+  resolved_at?: string;
+}
+
+// -----------------------------
+// DECISION ENGINE
+// -----------------------------
 export class DecisionEngine {
   /**
    * Creates a suggestion
    */
-  static async createSuggestion({ estate_id, device_id, rule_id, message, action, payload }) {
-    const insert = {
+  static async createSuggestion({
+    estate_id,
+    device_id,
+    rule_id,
+    message,
+    action,
+    payload,
+  }: SuggestionInput): Promise<SuggestionData> {
+    const insert: SuggestionInput & { status: "pending" } = {
       estate_id,
       device_id,
       rule_id,
@@ -41,7 +73,12 @@ export class DecisionEngine {
   /**
    * User accepts the suggestion → perform action
    */
-  static async acceptSuggestion(id: string) {
+  static async acceptSuggestion(id: string): Promise<{
+    ok: true;
+    action?: string;
+    payload?: SuggestionPayload;
+    device_id: string;
+  }> {
     const { data: suggestion, error: fetchErr } = await supabase
       .from("suggestions")
       .select("*")
@@ -65,8 +102,6 @@ export class DecisionEngine {
       status: "accepted",
     });
 
-    // Trigger device action
-    // (Backend will send MQTT command)
     return {
       ok: true,
       action: suggestion.action,
@@ -78,7 +113,7 @@ export class DecisionEngine {
   /**
    * Dismiss a suggestion
    */
-  static async dismissSuggestion(id: string) {
+  static async dismissSuggestion(id: string): Promise<{ ok: true }> {
     const { data: suggestion } = await supabase
       .from("suggestions")
       .select("*")
