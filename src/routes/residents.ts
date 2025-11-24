@@ -4,33 +4,35 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/roles";
 import crypto from "crypto";
 import QRCode from "qrcode";
+import bcrypt from "bcrypt";
 
 const router = express.Router();
 
-/** POST /residents  — Create resident user + onboarding link */
+/** POST /residents — Create resident + onboarding */
 router.post("/", requireAuth, requireRole("estate"), async (req, res) => {
-  const { email, estateId, homeId } = req.body;
+  const { email, estateId, homeId, fullName, phone } = req.body;
 
   if (!email || !estateId) {
     return res.status(400).json({ error: "email and estateId required" });
   }
 
   try {
-    // 1. Create temporary password
-    const tempPassword = Math.random().toString(36).slice(-8);
+    // 1 — Generate password
+    const tempPassword = "OC-" + Math.floor(10000 + Math.random() * 90000);
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    // 2. Create resident user
+    // 2 — Create resident user
     const { data: user, error: userError } = await supabaseAdmin
       .from("users")
       .insert([
         {
           email,
-          username: null,
-          password: tempPassword,
+          password: hashedPassword,
+          full_name: fullName || null,
+          phone: phone || null,
+          role: "resident",
           estate_id: estateId,
           home_id: homeId || null,
-          isResident: true,
-          isEstateOwner: false,
         },
       ])
       .select()
@@ -40,7 +42,7 @@ router.post("/", requireAuth, requireRole("estate"), async (req, res) => {
       return res.status(500).json({ error: userError.message });
     }
 
-    // 3. Create onboarding token
+    // 3 — Create onboarding token
     const token = crypto.randomUUID();
 
     const { error: tokenError } = await supabaseAdmin
@@ -57,17 +59,14 @@ router.post("/", requireAuth, requireRole("estate"), async (req, res) => {
       return res.status(500).json({ error: tokenError.message });
     }
 
-    // 4. Generate onboarding link
+    // 4 — Generate onboarding link
     const onboardingUrl = `https://your-domain.com/onboard/${token}`;
 
-    // 5. Generate QR Code (base64)
+    // 5 — Generate QR code
     const qrDataUrl = await QRCode.toDataURL(onboardingUrl);
 
-    // (Email sending would go here)
-
-    // 6. Return full details to estate dashboard
     return res.json({
-      message: "Resident created & onboarding link generated",
+      message: "Resident created successfully",
       user,
       onboardingUrl,
       qrDataUrl,
@@ -75,7 +74,10 @@ router.post("/", requireAuth, requireRole("estate"), async (req, res) => {
     });
   } catch (err: any) {
     console.error(err);
-    return res.status(500).json({ error: "Server error", details: err.message });
+    return res.status(500).json({
+      error: "Server error",
+      details: err.message,
+    });
   }
 });
 
