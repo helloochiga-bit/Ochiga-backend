@@ -1,35 +1,16 @@
 // src/server.ts
-import express from "express";
 import http from "http";
 import { Server as IOServer } from "socket.io";
-import cors from "cors";
-import helmet from "helmet";
-import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 
 // Load env variables
 dotenv.config();
 
-import appRouter from "./app"; // central router
+import app from "./app"; // ✅ import the Express app directly
 import { initMqttBridge } from "./device/bridge";
 import { startWorkers } from "./workers/automationWorker";
 
-const app = express();
-
-// ─── Middleware ───────────────────────────────
-app.use(helmet());
-app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: "2mb" }));
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-
-// ─── Mount API ───────────────────────────────
-app.use("/api", appRouter);
-
-// ─── Health Check ────────────────────────────
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok", uptime: process.uptime() });
-});
+const PORT = process.env.PORT ? Number(process.env.PORT) : 5000;
 
 // ─── HTTP + WebSocket Server ─────────────────
 const httpServer = http.createServer(app);
@@ -62,8 +43,6 @@ io.on("connection", (socket) => {
 });
 
 // ─── Start Server ────────────────────────────
-const PORT = process.env.PORT ? Number(process.env.PORT) : 5000;
-
 httpServer.listen(PORT, async () => {
   console.log(`HTTP + WS server listening on port ${PORT}`);
 
