@@ -1,49 +1,28 @@
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import { supabase } from "../supabase/supabaseClient";
+import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
 
-export class AuthService {
-  async login(data: { usernameOrEmail: string; password: string }) {
-    const { usernameOrEmail, password } = data;
+@Entity("users")
+export class Users {
+  @PrimaryGeneratedColumn("uuid")
+  id!: string; // Use "!" to tell TS that TypeORM will assign the value
 
-    // 1. Find user by email or username
-    const { data: user, error } = await supabase
-      .from("users")
-      .select("*")
-      .or(`email.eq.${usernameOrEmail},username.eq.${usernameOrEmail}`)
-      .single();
+  @Column({ unique: true })
+  email!: string;
 
-    if (error || !user) {
-      throw new Error("User not found");
-    }
+  @Column({ unique: true, nullable: true })
+  username!: string | null;
 
-    // 2. Validate password
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
-      throw new Error("Invalid password");
-    }
+  @Column()
+  password!: string;
 
-    // 3. Create JWT token
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        username: user.username
-      },
-      process.env.JWT_SECRET!,
-      { expiresIn: "7d" }
-    );
+  @Column({ default: false })
+  isResident!: boolean;
 
-    return {
-      message: "Login successful",
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username
-      }
-    };
-  }
+  @Column({ default: false })
+  isEstateOwner!: boolean;
+
+  @Column({ nullable: true })
+  homeId!: string | null;
+
+  @Column({ nullable: true })
+  estateId!: string | null;
 }
-
-export const authService = new AuthService();
