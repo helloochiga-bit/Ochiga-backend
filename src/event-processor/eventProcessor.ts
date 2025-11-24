@@ -1,5 +1,4 @@
-// src/event-processor/eventProcessor.ts
-import { evaluateEvent } from "./decisionEngine";
+import { evaluateEvent, Suggestion } from "./decisionEngine";
 import { DecisionEngine } from "../decision-engine";
 import { mqttClient } from "../mqtt";
 
@@ -11,17 +10,6 @@ export interface Event {
   timestamp?: Date;
 }
 
-// Suggestion interface
-export interface Suggestion {
-  estateId: string;
-  deviceId: string;
-  ruleId?: string;
-  message: string;
-  action: "turn_off" | "dim_light" | "lock_door";
-  payload?: any;
-  status?: "pending" | "accepted" | "dismissed" | "executed";
-}
-
 // Process a single event into a suggestion
 export async function processEvent(event: Event): Promise<Suggestion | null> {
   console.log("Processing event:", event);
@@ -30,8 +18,18 @@ export async function processEvent(event: Event): Promise<Suggestion | null> {
   const suggestion = evaluateEvent(event);
 
   if (suggestion) {
-    // Save suggestion in DB + emit via Socket.io
-    await DecisionEngine.createSuggestion(suggestion);
+    // Ensure all required fields are present before saving
+    const fullSuggestion: Suggestion = {
+      estateId: suggestion.estateId || "default_estate",
+      deviceId: suggestion.deviceId || "unknown_device",
+      ruleId: suggestion.ruleId || "default_rule",
+      message: suggestion.message,
+      action: suggestion.action,
+      payload: suggestion.payload || {},
+      status: suggestion.status || "pending",
+    };
+
+    await DecisionEngine.createSuggestion(fullSuggestion);
   }
 
   return suggestion;
@@ -41,7 +39,7 @@ export async function processEvent(event: Event): Promise<Suggestion | null> {
 export function startEventProcessor() {
   console.log("Event Processor started");
 
-  // Optional: listen to real device events via MQTT
+  // Listen to real device events via MQTT
   mqttClient.subscribe("ochiga/events/#", (err) => {
     if (!err) console.log("Subscribed to device events via MQTT");
   });
@@ -55,7 +53,7 @@ export function startEventProcessor() {
     }
   });
 
-  // Optional: simulate events for testing
+  // Simulate events for testing
   setInterval(async () => {
     const simulatedEvent: Event = {
       deviceId: "device-001",
@@ -63,5 +61,5 @@ export function startEventProcessor() {
       payload: { motion: Math.random() > 0.5 },
     };
     await processEvent(simulatedEvent);
-  }, 15000); // every 15s
+  }, 15000); // every 15 seconds
 }
