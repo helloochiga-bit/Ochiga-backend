@@ -18,12 +18,16 @@ const DEFAULT_ICON =
 type Device = {
   id: string;
   name: string;
-  protocol: string;
-  ip: string;
+  supportedProtocols: string[]; // ["mqtt","wifi","zigbee","zwave","ble"]
+  currentProtocol: string;
+  ip?: string;
   port?: string;
   type?: string;
-  status: string;
+  status: "found" | "connected" | "offline";
   icon: string;
+  signalStrength?: number;
+  latency?: number;
+  reliability?: number;
 };
 
 // -------------------------------------------------
@@ -39,6 +43,68 @@ function getLocalNetworkInfo() {
     }
   }
   return {};
+}
+
+// -------------------------------------------------
+// CONNECTIVITY SCORING
+// -------------------------------------------------
+async function evaluateConnectivity(device: Device) {
+  const scores: {
+    protocol: string;
+    signalStrength: number;
+    latency: number;
+    reliability: number;
+    overall: number;
+  }[] = [];
+
+  for (const proto of device.supportedProtocols) {
+    let signal = 50,
+      latencyMs = 50,
+      reliability = 80;
+
+    switch (proto) {
+      case "wifi":
+      case "mqtt":
+        if (device.ip) {
+          const res = await ping.promise.probe(device.ip, { timeout: 2 });
+          signal = res.alive ? 80 : 20;
+          latencyMs = res.time || 100;
+          reliability = res.alive ? 90 : 20;
+        }
+        break;
+      case "ble":
+        signal = Math.floor(Math.random() * 50 + 50);
+        latencyMs = Math.floor(Math.random() * 20 + 10);
+        reliability = Math.floor(Math.random() * 40 + 60);
+        break;
+      case "zigbee":
+      case "zwave":
+        signal = Math.floor(Math.random() * 60 + 40);
+        latencyMs = Math.floor(Math.random() * 30 + 20);
+        reliability = Math.floor(Math.random() * 50 + 50);
+        break;
+    }
+
+    scores.push({
+      protocol: proto,
+      signalStrength: signal,
+      latency: latencyMs,
+      reliability,
+      overall: signal * 0.5 + reliability * 0.3 + (100 - latencyMs) * 0.2,
+    });
+  }
+
+  // Sort descending by overall score
+  scores.sort((a, b) => b.overall - a.overall);
+
+  // Best protocol
+  const best = scores[0];
+  device.currentProtocol = best.protocol;
+  device.signalStrength = best.signalStrength;
+  device.latency = best.latency;
+  device.reliability = best.reliability;
+
+  return device;
 }
 
 // -------------------------------------------------
@@ -58,14 +124,16 @@ async function pingSweep(limit = 254): Promise<Device[]> {
     const res = await ping.promise.probe(ip, { timeout: 2 });
 
     if (res.alive) {
-      found.push({
+      const device: Device = {
         id: ip,
         name: `Device ${ip}`,
-        protocol: "ping",
+        supportedProtocols: ["ping", "wifi", "mqtt"],
+        currentProtocol: "ping",
         ip,
         status: "found",
         icon: DEFAULT_ICON,
-      });
+      };
+      found.push(await evaluateConnectivity(device));
     }
   });
 
@@ -81,17 +149,19 @@ async function ssdpDiscover(timeout = 3500): Promise<Device[]> {
     const client = new SSDPClient();
     const found: Device[] = [];
 
-    client.on("response", (headers: any, statusCode: number, rinfo: any) => {
-      found.push({
+    client.on("response", async (headers: any, _statusCode: number, rinfo: any) => {
+      const device: Device = {
         id: headers.USN || rinfo.address,
         name: headers.SERVER || headers.ST || "SSDP Device",
-        protocol: "ssdp",
+        supportedProtocols: ["ssdp", "wifi", "mqtt"],
+        currentProtocol: "ssdp",
         ip: rinfo.address,
         port: headers.LOCATION ? new URL(headers.LOCATION).port : undefined,
         type: headers.ST || "unknown",
         status: "found",
         icon: DEFAULT_ICON,
-      });
+      };
+      found.push(await evaluateConnectivity(device));
     });
 
     client.search("ssdp:all");
@@ -115,18 +185,20 @@ async function mqttDiscover(timeout = 3000): Promise<Device[]> {
       mqttClient.subscribe("ochiga/+/device/+/announce", { qos: 1 });
     });
 
-    mqttClient.on("message", (topic, message) => {
+    mqttClient.on("message", async (topic, message) => {
       try {
         const data = JSON.parse(message.toString());
-        found.push({
+        const device: Device = {
           id: data.id,
           name: data.name,
-          protocol: "mqtt",
+          supportedProtocols: ["mqtt", "wifi"],
+          currentProtocol: "mqtt",
           ip: data.ip || "unknown",
           type: data.type || "device",
           status: "found",
           icon: data.icon || DEFAULT_ICON,
-        });
+        };
+        found.push(await evaluateConnectivity(device));
       } catch (err) {
         console.warn("MQTT parse error:", err);
       }
@@ -142,7 +214,7 @@ async function mqttDiscover(timeout = 3000): Promise<Device[]> {
 // -------------------------------------------------
 // MAIN DISCOVERY ROUTE
 // -------------------------------------------------
-router.get("/discover", requireAuth, async (req, res) => {
+router.get("/discover", requireAuth, async (_req, res) => {
   try {
     console.log("🔎 Device discovery started...");
 
@@ -159,7 +231,7 @@ router.get("/discover", requireAuth, async (req, res) => {
 
     console.log(`✅ ${all.length} device(s) discovered.`);
     all.forEach((d) =>
-      console.log(`→ ${d.name} (${d.protocol}) @ ${d.ip}`)
+      console.log(`→ ${d.name} (${d.currentProtocol}) @ ${d.ip}`)
     );
 
     res.json({ devices: all });
