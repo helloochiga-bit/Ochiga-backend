@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { authService } from "../services/auth.service";
+import { authService } from "./auth.service"; // fixed relative path
 
 export const login = async (req: Request, res: Response) => {
   try {
