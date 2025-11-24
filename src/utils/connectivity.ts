@@ -1,45 +1,45 @@
 // src/utils/connectivity.ts
 import ping from "ping";
-import { Device } from "../routes/devices"; // adjust import if your Device type is elsewhere
+import { Device } from "../routes/devices";
 
 export interface ConnectivityScore {
   protocol: string;
-  signalStrength: number;  // 0-100
-  latency: number;         // ms
-  reliability: number;     // 0-100
-  overall: number;         // weighted score
+  signalStrength: number; // 0-100
+  latency: number;        // ms
+  reliability: number;    // 0-100
+  overall: number;        // weighted score
 }
 
 /**
  * Evaluate all supported protocols for a given device
  */
-export async function evaluateDeviceConnectivity(device: Device): Promise<ConnectivityScore[]> {
+export async function evaluateDeviceConnectivity(
+  device: Device
+): Promise<ConnectivityScore[]> {
   const scores: ConnectivityScore[] = [];
 
   for (const proto of device.supportedProtocols || []) {
-    let signal = 50, latencyMs = 50, reliability = 80;
+    let signal = 50,
+      latencyMs = 50,
+      reliability = 80;
 
-    switch(proto) {
+    switch (proto) {
       case "wifi":
       case "mqtt":
-        if(device.ip){
+        if (device.ip) {
           const res = await ping.promise.probe(device.ip, { timeout: 2 });
           signal = res.alive ? 80 : 20;
           latencyMs = res.time || 100;
           reliability = res.alive ? 90 : 20;
         }
         break;
-
       case "ble":
-        // placeholder: BLE scanning / RSSI logic
         signal = Math.floor(Math.random() * 50 + 50);
         latencyMs = Math.floor(Math.random() * 20 + 10);
         reliability = Math.floor(Math.random() * 40 + 60);
         break;
-
       case "zigbee":
       case "zwave":
-        // placeholder: hub metrics
         signal = Math.floor(Math.random() * 60 + 40);
         latencyMs = Math.floor(Math.random() * 30 + 20);
         reliability = Math.floor(Math.random() * 50 + 50);
