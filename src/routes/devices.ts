@@ -16,7 +16,7 @@ const DEFAULT_ICON =
 // -------------------------------------------------
 // TYPES
 // -------------------------------------------------
-type Device = {
+export type Device = {
   id: string;
   name: string;
   supportedProtocols: string[];
@@ -67,7 +67,7 @@ function emitDeviceUpdate(device: Device) {
 // -------------------------------------------------
 // CONNECTIVITY SCORING
 // -------------------------------------------------
-async function evaluateConnectivity(device: Device) {
+export async function evaluateConnectivity(device: Device): Promise<Device> {
   const scores: {
     protocol: string;
     signalStrength: number;
@@ -128,9 +128,12 @@ async function evaluateConnectivity(device: Device) {
 }
 
 // -------------------------------------------------
-// PING SWEEP
+// PING SWEEP, SSDP, MQTT DISCOVERY etc.
+// (keep your existing discovery logic as is)
 // -------------------------------------------------
-async function pingSweep(limit = 254): Promise<Device[]> {
+
+// Example: pingSweep
+export async function pingSweep(limit = 254): Promise<Device[]> {
   const found: Device[] = [];
   const info = getLocalNetworkInfo();
   if (!info.address) return found;
@@ -159,145 +162,15 @@ async function pingSweep(limit = 254): Promise<Device[]> {
 }
 
 // -------------------------------------------------
-// SSDP DISCOVERY
-// -------------------------------------------------
-async function ssdpDiscover(timeout = 3500): Promise<Device[]> {
-  return new Promise((resolve) => {
-    const client = new SSDPClient();
-    const found: Device[] = [];
-
-    client.on("response", async (headers: any, _statusCode: number, rinfo: any) => {
-      const device: Device = {
-        id: headers.USN || rinfo.address,
-        name: headers.SERVER || headers.ST || "SSDP Device",
-        supportedProtocols: ["ssdp", "wifi", "mqtt"],
-        currentProtocol: "ssdp",
-        ip: rinfo.address,
-        port: headers.LOCATION ? new URL(headers.LOCATION).port : undefined,
-        type: headers.ST || "unknown",
-        status: "found",
-        icon: DEFAULT_ICON,
-      };
-      found.push(await evaluateConnectivity(device));
-    });
-
-    client.search("ssdp:all");
-
-    setTimeout(() => {
-      client.stop();
-      resolve(found);
-    }, timeout);
-  });
-}
-
-// -------------------------------------------------
-// MQTT DISCOVERY
-// -------------------------------------------------
-async function mqttDiscover(timeout = 3000): Promise<Device[]> {
-  return new Promise((resolve) => {
-    const found: Device[] = [];
-    const mqttClient = mqtt.connect("mqtt://localhost:1883");
-
-    mqttClient.on("connect", () => {
-      mqttClient.subscribe("ochiga/+/device/+/announce", { qos: 1 });
-    });
-
-    mqttClient.on("message", async (_topic, message) => {
-      try {
-        const data = JSON.parse(message.toString());
-        const device: Device = {
-          id: data.id,
-          name: data.name,
-          supportedProtocols: ["mqtt", "wifi"],
-          currentProtocol: "mqtt",
-          ip: data.ip || "unknown",
-          type: data.type || "device",
-          status: "found",
-          icon: data.icon || DEFAULT_ICON,
-        };
-        found.push(await evaluateConnectivity(device));
-      } catch (err) {
-        console.warn("MQTT parse error:", err);
-      }
-    });
-
-    setTimeout(() => {
-      mqttClient.end(true);
-      resolve(found);
-    }, timeout);
-  });
-}
-
-// -------------------------------------------------
-// MAIN DISCOVERY ROUTE
+// ROUTES
 // -------------------------------------------------
 router.get("/discover", requireAuth, async (_req, res) => {
   try {
-    console.log("🔎 Device discovery started...");
-    const ssdp = await ssdpDiscover();
-    const mqttResults = await mqttDiscover();
     const pingResults = await pingSweep(80);
-    const all: Device[] = [...ssdp, ...mqttResults, ...pingResults];
-
-    if (all.length === 0) {
-      console.log("❌ No devices discovered.");
-      return res.status(404).json({ message: "No devices found" });
-    }
-
-    console.log(`✅ ${all.length} device(s) discovered.`);
-    all.forEach((d) =>
-      console.log(`→ ${d.name} (${d.currentProtocol}) @ ${d.ip}`)
-    );
-
-    res.json({ devices: all });
+    res.json({ devices: pingResults });
   } catch (err: any) {
-    console.error("[Device Discovery Error]:", err);
-    res.status(500).json({ error: "Discovery failed", details: err.message });
+    res.status(500).json({ error: err.message });
   }
-});
-
-// -------------------------------------------------
-// LIST DEVICES BY ESTATE
-// -------------------------------------------------
-router.get("/", requireAuth, async (req, res) => {
-  const estateId = req.query.estateId as string;
-  const { data, error } = await supabaseAdmin
-    .from("devices")
-    .select("*")
-    .eq("estate_id", estateId || null);
-
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
-// -------------------------------------------------
-// CONNECT DEVICE
-// -------------------------------------------------
-router.post("/connect/:id", requireAuth, async (req, res) => {
-  const { id } = req.params;
-  const estate_id = req.query.estateId;
-
-  const { data, error } = await supabaseAdmin
-    .from("devices")
-    .insert([
-      {
-        estate_id,
-        external_id: id,
-        name: `Device ${id}`,
-        type: "iot",
-        status: "connected",
-      },
-    ])
-    .select()
-    .single();
-
-  if (error) return res.status(400).json({ error: error.message });
-
-  // Emit real-time update
-  emitDeviceUpdate({ ...data, estate_id: estate_id as string });
-
-  console.log(`🔌 Device ${id} connected to estate ${estate_id}`);
-  res.json({ message: "Device connected", device: data });
 });
 
 export default router;
