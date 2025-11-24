@@ -3,7 +3,6 @@ import jwt from "jsonwebtoken";
 import { supabase } from "../config/supabase";
 
 export class AuthService {
-
   async login(data: { usernameOrEmail: string; password: string }) {
     const { usernameOrEmail, password } = data;
 
