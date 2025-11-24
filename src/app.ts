@@ -13,10 +13,11 @@ import devicesRoutes from "./routes/devices";
 const app = express();
 
 // ─── Global Middleware ───────────────────────────────
-app.use(helmet());
-app.use(cors());
-app.use(express.json());
-app.use(morgan("dev"));
+app.use(helmet()); // Security headers
+app.use(cors({ origin: true, credentials: true })); // CORS with credentials
+app.use(express.json({ limit: "2mb" })); // Parse JSON bodies
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
+app.use(morgan("dev")); // HTTP request logging
 
 // ─── Health Check ───────────────────────────────
 app.get("/health", (req, res) => {
@@ -27,7 +28,7 @@ app.get("/health", (req, res) => {
   });
 });
 
-// ─── Route Mounting ───────────────────────────────
+// ─── Mount Routes ───────────────────────────────
 app.use("/auth", authRoutes);
 app.use("/estates", estatesRoutes);
 app.use("/residents", residentsRoutes);
