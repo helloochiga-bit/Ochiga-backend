@@ -1,16 +1,10 @@
+// src/auth/auth.service.ts
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { supabaseAdmin as supabase } from "../supabase/supabaseClient"; // fixed import
+import { supabaseAdmin as supabase } from "../supabase/supabaseClient";
 
 interface LoginData {
   usernameOrEmail: string;
-  password: string;
-}
-
-interface User {
-  id: string;
-  email: string;
-  username?: string | null;
   password: string;
 }
 
@@ -18,9 +12,9 @@ export class AuthService {
   async login(data: LoginData) {
     const { usernameOrEmail, password } = data;
 
-    // 1. Find user by email or username
+    // 1. Find user by email or username (NO GENERICS!)
     const { data: user, error } = await supabase
-      .from<User>("users")
+      .from("users")
       .select("*")
       .or(`email.eq.${usernameOrEmail},username.eq.${usernameOrEmail}`)
       .single();
@@ -36,8 +30,9 @@ export class AuthService {
     }
 
     // 3. Create JWT token
-    if (!process.env.SUPABASE_JWT_SECRET) {
-      throw new Error("JWT secret not set");
+    const secret = process.env.SUPABASE_JWT_SECRET;
+    if (!secret) {
+      throw new Error("Missing SUPABASE_JWT_SECRET in environment");
     }
 
     const token = jwt.sign(
@@ -46,7 +41,7 @@ export class AuthService {
         email: user.email,
         username: user.username,
       },
-      process.env.SUPABASE_JWT_SECRET,
+      secret,
       { expiresIn: "7d" }
     );
 
@@ -62,5 +57,4 @@ export class AuthService {
   }
 }
 
-// Export singleton
 export const authService = new AuthService();
