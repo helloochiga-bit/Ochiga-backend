@@ -19,13 +19,11 @@ export function evaluateEvent(event: EventPayload): Suggestion | null {
     if (rule.condition(event)) {
       const action = rule.action(event);
 
-      // Narrow action type for message
       const message =
         (action as RuleActionSuggestion).type === "suggestion"
           ? (action as RuleActionSuggestion).message
           : "Action triggered";
 
-      // Map action type to Suggestion.action
       const suggestionAction: Suggestion["action"] =
         (action as RuleActionDeviceCommand).type === "device_command" ? "turn_off" : "notify";
 
@@ -39,7 +37,7 @@ export function evaluateEvent(event: EventPayload): Suggestion | null {
         status: "pending",
       };
 
-      // Immediately execute actions
+      // Execute actions immediately
       if ((action as RuleActionDeviceCommand).type === "device_command") {
         const cmd = action as RuleActionDeviceCommand;
         publishCommand(cmd.device_id, cmd.command);
@@ -54,3 +52,27 @@ export function evaluateEvent(event: EventPayload): Suggestion | null {
 
   return null;
 }
+
+// DecisionEngine object that handles DB insertion
+export const DecisionEngine = {
+  async createSuggestion(suggestion: Suggestion) {
+    // Convert camelCase to snake_case before sending to PostgREST/Supabase
+    const payload = {
+      estate_id: suggestion.estateId,
+      device_id: suggestion.deviceId,
+      rule_id: suggestion.ruleId,
+      message: suggestion.message,
+      action: suggestion.action,
+      payload: suggestion.payload || {},
+      status: suggestion.status || "pending",
+    };
+
+    // Replace with your actual Supabase client code
+    // For example:
+    // await supabase.from("suggestions").insert(payload);
+    console.log("Saved suggestion to DB:", payload);
+  },
+};
+
+// ✅ Export EventPayload type so eventProcessor can import it
+export type { EventPayload };
