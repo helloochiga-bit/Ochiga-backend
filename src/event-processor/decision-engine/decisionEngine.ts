@@ -1,17 +1,25 @@
 // src/event-processor/decision-engine/decisionEngine.ts
-import { rules, EventPayload, RuleAction, RuleActionSuggestion, RuleActionDeviceCommand } from "../rule-engine/rules";
-import { publishCommand, pushSuggestion } from "../rule-engine/actions";
+import { rules, EventPayload, RuleActionDeviceCommand, RuleActionSuggestion } from "../rule-engine/rules";
+import { pushSuggestion, publishCommand } from "../rule-engine/actions";
 
-// Suggestion interface for TypeScript
+// Suggestion interface for DB
 export interface Suggestion {
-  estateId: string;
-  deviceId: string;
-  ruleId?: string;
+  estate_id: string;
+  device_id: string;
+  rule_id?: string;
   message: string;
   action: "turn_off" | "dim_light" | "lock_door" | "notify";
   payload?: any;
   status?: "pending" | "accepted" | "dismissed" | "executed";
 }
+
+// DecisionEngine mock (replace with your DB integration)
+export const DecisionEngine = {
+  async createSuggestion(suggestion: Suggestion) {
+    console.log("💡 Suggestion created:", suggestion);
+    // TODO: insert into Supabase/Postgres
+  },
+};
 
 // Evaluate an event against all rules
 export function evaluateEvent(event: EventPayload): Suggestion | null {
@@ -28,22 +36,19 @@ export function evaluateEvent(event: EventPayload): Suggestion | null {
         (action as RuleActionDeviceCommand).type === "device_command" ? "turn_off" : "notify";
 
       const suggestion: Suggestion = {
-        estateId: event.estate_id || event.estateId,
-        deviceId: event.device_id || event.deviceId,
-        ruleId: rule.id || "default_rule",
+        estate_id: event.estate_id || "default_estate",
+        device_id: event.device_id,
+        rule_id: rule.id || "default_rule",
         message,
         action: suggestionAction,
         payload: action,
         status: "pending",
       };
 
-      // Execute device commands immediately
+      // Immediately execute actions
       if ((action as RuleActionDeviceCommand).type === "device_command") {
-        const cmd = action as RuleActionDeviceCommand;
-        publishCommand(cmd.device_id, cmd.command);
+        publishCommand((action as RuleActionDeviceCommand).device_id, (action as RuleActionDeviceCommand).command);
       }
-
-      // Push suggestions if needed
       if ((action as RuleActionSuggestion).type === "suggestion") {
         pushSuggestion(action as RuleActionSuggestion);
       }
