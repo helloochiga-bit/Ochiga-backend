@@ -1,29 +1,40 @@
-import { rules, EventPayload } from "./rule-engine/rules";
+import { rules } from "./rule-engine/rules";
+import { Event } from "./eventProcessor";
 
-export async function processEvent(event: EventPayload) {
-  try {
-    console.log("🔎 Processing event:", event);
+// Suggestion interface
+export interface Suggestion {
+  estateId: string;
+  deviceId: string;
+  ruleId?: string;
+  message: string;
+  action: "turn_off" | "dim_light" | "lock_door" | "notify"; // include "notify"
+  payload?: any;
+  status?: "pending" | "accepted" | "dismissed" | "executed";
+}
 
-    for (const rule of rules) {
-      try {
-        if (rule.condition(event)) {
-          console.log(`✅ Rule triggered: ${rule.id}`);
+// Evaluate an event against all rules and return a Suggestion
+export function evaluateEvent(event: Event): Suggestion | null {
+  for (const rule of rules) {
+    if (rule.condition(event)) {
+      const action = rule.action(event);
 
-          const action = rule.action(event);
+      // Map action type to Suggestion.action
+      const suggestionAction: Suggestion["action"] =
+        action.type === "device_command" ? "turn_off" : "notify";
 
-          return {
-            rule: rule.id,
-            action,
-          };
-        }
-      } catch (err) {
-        console.error(`❌ Rule condition error (${rule.id}):`, err);
-      }
+      const suggestion: Suggestion = {
+        estateId: event.deviceId, // replace with actual estateId if available
+        deviceId: event.deviceId,
+        ruleId: rule.id || "default_rule",
+        message: action.message || "Action triggered",
+        action: suggestionAction,
+        payload: action,
+        status: "pending",
+      };
+
+      return suggestion;
     }
-
-    return { message: "No rules triggered", event };
-  } catch (err) {
-    console.error("DecisionEngine error:", err);
-    return { error: "Decision engine failure", details: err };
   }
+
+  return null;
 }
