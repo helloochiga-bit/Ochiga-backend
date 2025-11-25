@@ -25,5 +25,5 @@ export const APP_JWT_SECRET = requireEnv("APP_JWT_SECRET");
  * Utility to log which port the app actually binds to
  */
 export function logPortBinding(actualPort: number) {
-  console.log(`✅ Ochiga backend is listening on http://localhost:${actualPort}`);
+  console.log(`✅ Ochiga backend is listening on 0.0.0.0:${actualPort}`);
 }
