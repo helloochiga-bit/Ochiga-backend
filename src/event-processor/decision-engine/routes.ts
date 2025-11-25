@@ -1,42 +1,27 @@
-// src/decision-engine/routes.ts
+// src/event-processor/decision-engine/routes.ts
+import express from "express";
+import { DecisionEngine } from "./index"; // fixed relative import
+import { requireAuth } from "../../middleware/auth";
 
-import { Router } from "express";
-import { DecisionEngine } from "./index";
-import { mqttClient } from "../mqtt";
+const router = express.Router();
 
-const router = Router();
-
-// Accept suggestion
-router.post("/:id/accept", async (req, res) => {
+// Accept a suggestion
+router.post("/:id/accept", requireAuth, async (req, res) => {
   try {
-    const { id } = req.params;
-    const result = await DecisionEngine.acceptSuggestion(id);
-
-    // Execute device command over MQTT
-    mqttClient.publish(
-      `ochiga/device/${result.device_id}/commands`,
-      JSON.stringify({
-        action: result.action,
-        payload: result.payload,
-      })
-    );
-
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Failed to accept suggestion" });
+    const result = await DecisionEngine.acceptSuggestion(req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Dismiss suggestion
-router.post("/:id/dismiss", async (req, res) => {
+// Dismiss a suggestion
+router.post("/:id/dismiss", requireAuth, async (req, res) => {
   try {
-    const { id } = req.params;
-    await DecisionEngine.dismissSuggestion(id);
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Failed to dismiss suggestion" });
+    const result = await DecisionEngine.dismissSuggestion(req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 
