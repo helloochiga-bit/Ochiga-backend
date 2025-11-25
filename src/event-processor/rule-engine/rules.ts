@@ -1,15 +1,33 @@
 // src/event-processor/rule-engine/rules.ts
+
 export interface EventPayload {
   event_type: string;
   deviceId: string;
   data?: any;
 }
 
+export interface RuleActionDeviceCommand {
+  type: "device_command";
+  device_id: string;
+  command: any;
+  priority?: string;
+  source_rule?: string;
+}
+
+export interface RuleActionSuggestion {
+  type: "suggestion";
+  message: string;
+  target_user?: string;
+  metadata?: Record<string, any>;
+}
+
+export type RuleAction = RuleActionDeviceCommand | RuleActionSuggestion;
+
 export interface Rule {
   id: string;
   description: string;
   condition: (event: EventPayload) => boolean;
-  action: (event: EventPayload) => any;
+  action: (event: EventPayload) => RuleAction;
 }
 
 export const rules: Rule[] = [
