@@ -1,13 +1,14 @@
+// src/routes/notifications.ts
 import express from "express";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, AuthedRequest } from "../middleware/auth";
 import { supabaseAdmin } from "../supabase/client";
 import { io } from "../server";
 
 const router = express.Router();
 
 // GET notifications for a user
-router.get("/", requireAuth, async (req, res) => {
-  const userId = req.user.id;
+router.get("/", requireAuth, async (req: AuthedRequest, res) => {
+  const userId = req.user!.id; // non-null assertion since requireAuth ensures user exists
   const { data, error } = await supabaseAdmin
     .from("notifications")
     .select("*")
@@ -19,7 +20,7 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 // MARK notification as read
-router.post("/read/:id", requireAuth, async (req, res) => {
+router.post("/read/:id", requireAuth, async (req: AuthedRequest, res) => {
   const { id } = req.params;
 
   const { data, error } = await supabaseAdmin
@@ -41,7 +42,7 @@ export async function sendNotification(userId: string, payload: any) {
     .select()
     .single();
 
-  if (!error) {
+  if (!error && data) {
     io.to(`user:${userId}`).emit("notification:new", data);
   }
 }
