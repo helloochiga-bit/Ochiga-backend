@@ -1,27 +1,19 @@
-import { rules } from "./rules.ts";
-import { pushSuggestion, publishCommand } from "./actions.ts";
+// src/event-processor/rule-engine/engine.ts
+import { rules, EventPayload, RuleAction } from "./rules";
+import { pushSuggestion, publishCommand } from "./actions";
 
-export function evaluateRules(event) {
+export function evaluateRules(event: EventPayload) {
   console.log("🧠 Evaluating rules for event:", event.event_type);
 
-  rules.forEach(rule => {
+  rules.forEach((rule) => {
     try {
-      const match = rule.condition(event);
-
-      if (!match) return;
+      if (!rule.condition(event)) return;
 
       console.log(`→ Rule Matched: ${rule.id}`);
+      const action: RuleAction = rule.action(event);
 
-      const action = rule.action(event);
-
-      if (action.type === "suggestion") {
-        pushSuggestion(action);
-      }
-
-      if (action.type === "device_command") {
-        publishCommand(action.device_id, action.command);
-      }
-
+      if (action.type === "suggestion") pushSuggestion(action);
+      if (action.type === "device_command") publishCommand(action.device_id, action.command);
     } catch (err) {
       console.error("❌ Error evaluating rule:", rule.id, err);
     }
