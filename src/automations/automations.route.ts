@@ -38,13 +38,27 @@ router.post("/ai-suggest", requireAuth, requireRole("estate"), async (req: any, 
     const { prompt, estateId } = req.body;
     if (!prompt || !estateId) return res.status(400).json({ error: "Missing prompt or estateId" });
 
-    // fetch devices to give context
+    // fetch devices to give context (ensure we get an array)
     const { data: devices } = await supabaseAdmin.from("devices").select("*").eq("estate_id", estateId);
 
-    // call AI NLU
-    const suggestion = await nluToAutomation(prompt, devices || []);
-    // validate
-    const parsed = AutomationSchema.parse({ ...suggestion, estate_id: estateId, ai_generated: true, created_at: new Date().toISOString() });
+    // Build a full NLUContext object (devices, homes, estates). You can expand homes/estates if needed.
+    const nluContext = {
+      devices: Array.isArray(devices) ? devices : [],
+      homes: [],
+      estates: [],
+    };
+
+    // call AI NLU — pass prompt + full context object
+    const suggestion = await nluToAutomation(prompt, nluContext);
+
+    // validate (attach estate_id and metadata)
+    const parsed = AutomationSchema.parse({
+      ...suggestion,
+      estate_id: estateId,
+      ai_generated: true,
+      created_at: new Date().toISOString(),
+    });
+
     // save
     const { data, error } = await supabaseAdmin.from("automations").insert([parsed]).select().single();
     if (error) return res.status(500).json({ error: error.message });
@@ -59,7 +73,6 @@ router.post("/ai-suggest", requireAuth, requireRole("estate"), async (req: any, 
 /** POST /automations/:id/trigger - run manually */
 router.post("/:id/trigger", requireAuth, async (req: any, res) => {
   const id = req.params.id;
-  // enqueue job for worker — the worker file will expose an enqueue helper
   try {
     const { enqueueAutomation } = await import("../workers/automationWorker");
     await enqueueAutomation(id);
