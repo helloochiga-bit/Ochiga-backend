@@ -1,5 +1,5 @@
 // src/event-processor/eventProcessor.ts
-import { mqttClient } from "../mqtt"; // ensure this is correct
+import { mqttClient } from "../mqtt";
 import { evaluateEvent, EventPayload, Suggestion, DecisionEngine } from "./decision-engine/index";
 
 // Process single event safely
@@ -10,10 +10,11 @@ export async function processEvent(event: EventPayload): Promise<Suggestion | nu
     const suggestion = evaluateEvent(event);
 
     if (suggestion) {
-      const fullSuggestion: Suggestion = {
-        estateId: suggestion.estateId || "default_estate",
-        deviceId: suggestion.deviceId || "unknown_device",
-        ruleId: suggestion.ruleId || "default_rule",
+      // Map camelCase → snake_case for Supabase/PostgREST
+      const fullSuggestion = {
+        estate_id: suggestion.estateId || "default_estate",
+        device_id: suggestion.deviceId || "unknown_device",
+        rule_id: suggestion.ruleId || "default_rule",
         message: suggestion.message,
         action: suggestion.action,
         payload: suggestion.payload || {},
@@ -46,7 +47,6 @@ export function startEventProcessor() {
     try {
       const event: EventPayload = JSON.parse(message.toString());
 
-      // Catch async errors
       processEvent(event).catch((err) => {
         console.error("Error processing MQTT event:", err);
       });
