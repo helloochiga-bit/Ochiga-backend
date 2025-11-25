@@ -1,4 +1,4 @@
-import { rules } from "./rules.js";
+import { rules } from "./rules.ts";
 import { pushSuggestion, publishCommand } from "./actions.js";
 
 export function evaluateRules(event) {
