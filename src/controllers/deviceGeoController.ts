@@ -32,9 +32,8 @@ export async function updateDeviceLocation(req: Request, res: Response) {
       .single();
 
     if (error) {
-      // If update fails, return but log
       console.error("Supabase update device location error:", error);
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message || "Update failed" });
     }
 
     // Try emitting via socket
@@ -49,7 +48,8 @@ export async function updateDeviceLocation(req: Request, res: Response) {
       console.warn("socket emit failed:", e);
     }
 
-    return res.json({ message: "Device location updated", device: data });
+    // ensure returned object contains message to avoid typed-access errors elsewhere
+    return res.json({ message: "Device location updated", device: (data as any) || null });
   } catch (err: any) {
     console.error("updateDeviceLocation error", err);
     return res.status(500).json({ error: err.message || "Internal error" });
@@ -83,13 +83,11 @@ export async function getDevicesNearPoint(req: Request, res: Response) {
       });
 
       if (!error && data) {
-        // RPC returns rows with distance_meters
         return res.json(data);
       }
-      // If RPC returns error, we'll fallback below
       console.warn("devices_near rpc returned error or no data:", error);
     } catch (rpcErr) {
-      console.warn("devices_near rpc failed, falling back to JS filter:", rpcErr?.message || rpcErr);
+      console.warn("devices_near rpc failed, falling back to JS filter:", (rpcErr as any)?.message || rpcErr);
     }
 
     // 2) Fallback: fetch all devices and compute distances in JS
@@ -99,7 +97,7 @@ export async function getDevicesNearPoint(req: Request, res: Response) {
 
     if (allErr) {
       console.error("Supabase devices fetch error:", allErr);
-      return res.status(500).json({ error: allErr.message });
+      return res.status(500).json({ error: allErr.message || "Failed to fetch devices" });
     }
 
     const filtered = (allDevices || [])
