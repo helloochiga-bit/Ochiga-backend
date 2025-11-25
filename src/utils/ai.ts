@@ -21,7 +21,7 @@ export type NLUContext = {
 export async function nluToAutomation(prompt: string, context: NLUContext) {
   if (!client) throw new Error("AI client not configured");
 
-  const { devices, homes = [], estates = [] } = context;
+  const { devices = [], homes = [], estates = [] } = context || {};
 
   const system = `You are a strict assistant that converts a user's natural language instruction into a JSON automation object.
 Return ONLY valid JSON matching this shape:
@@ -68,24 +68,24 @@ Respond with JSON only.`;
   // Map device friendly name to ID
   if (parsed?.action?.device_id && typeof parsed.action.device_id === "string") {
     const friendly = parsed.action.device_id.toLowerCase();
-    const found = devices.find((d: any) => d.name?.toLowerCase() === friendly);
+    const found = devices.find((d: any) => d.name?.toLowerCase() === friendly || d.id === parsed.action.device_id);
     if (found) parsed.action.device_id = found.id;
   }
 
   // Map home friendly name to ID for location triggers
   if (parsed?.trigger?.type === "location" && parsed.trigger.home_name) {
-    const home = homes.find((h: any) => h.name.toLowerCase() === parsed.trigger.home_name.toLowerCase());
+    const home = homes.find((h: any) => h.name && h.name.toLowerCase() === parsed.trigger.home_name.toLowerCase());
     if (home) parsed.trigger.home_id = home.id;
     delete parsed.trigger.home_name;
   }
 
   // Map estate if referenced
   if (parsed?.trigger?.estate_name) {
-    const estate = estates.find((e: any) => e.name.toLowerCase() === parsed.trigger.estate_name.toLowerCase());
+    const estate = estates.find((e: any) => e.name && e.name.toLowerCase() === parsed.trigger.estate_name.toLowerCase());
     if (estate) parsed.trigger.estate_id = estate.id;
     delete parsed.trigger.estate_name;
   }
 
-  // Validate final JSON
+  // Validate final JSON (this will throw if invalid)
   return AutomationSchema.parse(parsed);
 }
