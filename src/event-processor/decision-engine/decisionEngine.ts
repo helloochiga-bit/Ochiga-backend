@@ -1,5 +1,5 @@
-import { rules, EventPayload, RuleAction, RuleActionSuggestion } from "../rule-engine/rules";
-import { DecisionEngine } from "../../decision-engine";
+// src/event-processor/decision-engine/decisionEngine.ts
+import { rules, EventPayload, RuleAction, RuleActionSuggestion, RuleActionDeviceCommand } from "../rule-engine/rules";
 import { pushSuggestion, publishCommand } from "../rule-engine/actions";
 
 // Suggestion interface
@@ -8,7 +8,7 @@ export interface Suggestion {
   deviceId: string;
   ruleId?: string;
   message: string;
-  action: "turn_off" | "dim_light" | "lock_door" | "notify"; 
+  action: "turn_off" | "dim_light" | "lock_door" | "notify";
   payload?: any;
   status?: "pending" | "accepted" | "dismissed" | "executed";
 }
@@ -21,13 +21,13 @@ export function evaluateEvent(event: EventPayload): Suggestion | null {
 
       // Narrow action type for message
       const message =
-        action.type === "suggestion"
-          ? action.message
+        (action as RuleActionSuggestion).type === "suggestion"
+          ? (action as RuleActionSuggestion).message
           : "Action triggered";
 
       // Map action type to Suggestion.action
       const suggestionAction: Suggestion["action"] =
-        action.type === "device_command" ? "turn_off" : "notify";
+        (action as RuleActionDeviceCommand).type === "device_command" ? "turn_off" : "notify";
 
       const suggestion: Suggestion = {
         estateId: event.deviceId, // replace with real estateId if available
@@ -39,12 +39,13 @@ export function evaluateEvent(event: EventPayload): Suggestion | null {
         status: "pending",
       };
 
-      // Also immediately execute action for device_command
-      if (action.type === "device_command") {
-        publishCommand(action.device_id, action.command);
+      // Immediately execute actions
+      if ((action as RuleActionDeviceCommand).type === "device_command") {
+        const cmd = action as RuleActionDeviceCommand;
+        publishCommand(cmd.device_id, cmd.command);
       }
-      if (action.type === "suggestion") {
-        pushSuggestion(action);
+      if ((action as RuleActionSuggestion).type === "suggestion") {
+        pushSuggestion(action as RuleActionSuggestion);
       }
 
       return suggestion;
