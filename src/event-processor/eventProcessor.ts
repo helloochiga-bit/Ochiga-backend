@@ -2,7 +2,9 @@
 import { mqttClient } from "../mqtt";
 import { evaluateEvent, EventPayload, Suggestion, DecisionEngine } from "./decision-engine/index";
 
-// Process single event safely
+/**
+ * Process a single event safely
+ */
 export async function processEvent(event: EventPayload): Promise<Suggestion | null> {
   try {
     console.log("Processing event:", event);
@@ -10,7 +12,6 @@ export async function processEvent(event: EventPayload): Promise<Suggestion | nu
     const suggestion = evaluateEvent(event);
 
     if (suggestion) {
-      // Keep camelCase for TypeScript
       const fullSuggestion: Suggestion = {
         estateId: suggestion.estateId || "default_estate",
         deviceId: suggestion.deviceId || "unknown_device",
@@ -21,7 +22,7 @@ export async function processEvent(event: EventPayload): Promise<Suggestion | nu
         status: suggestion.status || "pending",
       };
 
-      // Map to snake_case only when sending to DB
+      // Convert to snake_case only when sending to the database
       await DecisionEngine.createSuggestion({
         estate_id: fullSuggestion.estateId,
         device_id: fullSuggestion.deviceId,
@@ -40,7 +41,9 @@ export async function processEvent(event: EventPayload): Promise<Suggestion | nu
   }
 }
 
-// Start background processor
+/**
+ * Start background processor
+ */
 export function startEventProcessor() {
   console.log("Event Processor started");
 
