@@ -1,6 +1,8 @@
-import { evaluateEvent, Suggestion } from "./decisionEngine";
-import { DecisionEngine } from "../decision-engine";
-import { mqttClient } from "../mqtt";
+// src/event-processor/eventProcessor.ts
+import { mqttClient } from "../mqtt"; // Make sure this path is correct
+import { evaluateEvent, Suggestion } from "./decision-engine/index";
+import { DecisionEngine } from "./decision-engine/index";
+import { EventPayload } from "./decision-engine/index";
 
 // Event interface
 export interface Event {
