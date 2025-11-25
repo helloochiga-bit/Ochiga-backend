@@ -1,14 +1,43 @@
 // src/routes/geo.ts
 import { Router } from "express";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, AuthedRequest } from "../middleware/auth";
 import { setEstateLocation, updateVisitorLocation } from "../controllers/geoController";
 
 const router = Router();
 
-// estate admins set estate coords
-router.post("/estate/:estateId", requireAuth, setEstateLocation);
+/**
+ * POST /geo/estate/:estateId
+ * Estate admins set/update estate coordinates
+ */
+router.post(
+  "/estate/:estateId",
+  requireAuth,
+  async (req: AuthedRequest, res) => {
+    try {
+      // You can access req.user here if needed
+      const estateId = req.params.estateId;
+      return setEstateLocation(req, res);
+    } catch (err: any) {
+      console.error("Error in /geo/estate route:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+);
 
-// visitor live location updates (may be public)
-router.post("/visitor/:visitorId", updateVisitorLocation);
+/**
+ * POST /geo/visitor/:visitorId
+ * Update live visitor location (may be public)
+ */
+router.post(
+  "/visitor/:visitorId",
+  async (req, res) => {
+    try {
+      return updateVisitorLocation(req, res);
+    } catch (err: any) {
+      console.error("Error in /geo/visitor route:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+);
 
 export default router;
