@@ -1,18 +1,17 @@
-// src/controllers/aiGeoController.ts
+// src/controllers/geoController.ts
 import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase/client";
 import { calculateDistance } from "../utils/geoMath";
 import { queryLLM } from "../utils/llmClient";
 
-/**
- * POST /api/ai/geo
- */
+/* ----------------------------------------
+   AI Geo Query Handler
+---------------------------------------- */
 export async function handleGeoQuery(req: Request, res: Response) {
   try {
     const { text, lat, lng } = req.body;
     if (!text) return res.status(400).json({ error: "text query required" });
 
-    // 1️⃣ Ask GPT to extract structured intent
     const llmPrompt = `
 You are a smart geolocation assistant for a smart estate system. 
 The user query is: """${text}"""
@@ -33,23 +32,21 @@ Respond ONLY as JSON with fields:
     const llmResponse = await queryLLM(llmPrompt);
 
     let parsed: any;
-    try {
-      parsed = JSON.parse(llmResponse);
-    } catch (err) {
-      console.warn("LLM JSON parse error, fallback:", err);
+    try { parsed = JSON.parse(llmResponse); } 
+    catch (err) { 
+      console.warn("LLM JSON parse error:", err);
       return res.status(500).json({ error: "LLM failed to return valid JSON", raw: llmResponse });
     }
 
     const { intent, params } = parsed;
 
-    // 2️⃣ Route to your existing handlers
     switch (intent) {
       case "nearest_device":
-        if (!params.lat || !params.lng) return res.status(400).json({ error: "lat/lng required for nearest_device" });
+        if (!params.lat || !params.lng) return res.status(400).json({ error: "lat/lng required" });
         return getDevicesNear(params.lat, params.lng, params.radius || 200, res);
 
       case "device_location":
-        if (!params.deviceId) return res.status(400).json({ error: "deviceId required for device_location" });
+        if (!params.deviceId) return res.status(400).json({ error: "deviceId required" });
         return getDeviceLocation(params.deviceId, res);
 
       case "visitor_distance":
@@ -57,7 +54,7 @@ Respond ONLY as JSON with fields:
         return getVisitorDistance(params.visitorId, params.estateId, res);
 
       default:
-        return res.json({ message: "Could not understand your query. Try: 'nearest device', 'where is device <id>', 'how far is visitor <id> from estate'" });
+        return res.json({ message: "Could not understand your query" });
     }
 
   } catch (err: any) {
@@ -66,10 +63,46 @@ Respond ONLY as JSON with fields:
   }
 }
 
+/* ----------------------------------------
+   Estate Location Handlers
+---------------------------------------- */
+export async function setEstateLocation(req: Request, res: Response) {
+  try {
+    const estateId = req.params.estateId;
+    const { lat, lng } = req.body;
+
+    if (!lat || !lng) return res.status(400).json({ error: "lat and lng are required" });
+
+    const { data, error } = await supabaseAdmin.from("estates").update({ lat, lng }).eq("id", estateId).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    return res.json({ message: "Estate location updated", estate: data });
+  } catch (err: any) {
+    console.error("setEstateLocation error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+export async function updateVisitorLocation(req: Request, res: Response) {
+  try {
+    const visitorId = req.params.visitorId;
+    const { lat, lng } = req.body;
+
+    if (!lat || !lng) return res.status(400).json({ error: "lat and lng are required" });
+
+    const { data, error } = await supabaseAdmin.from("visitors").update({ current_lat: lat, current_lng: lng }).eq("id", visitorId).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    return res.json({ message: "Visitor location updated", visitor: data });
+  } catch (err: any) {
+    console.error("updateVisitorLocation error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
 /* -----------------------------
    Helper functions re-used
 ----------------------------- */
-
 async function getDevicesNear(lat: number, lng: number, radius: number, res: Response) {
   try {
     const { data, error } = await supabaseAdmin.rpc("devices_near", {
