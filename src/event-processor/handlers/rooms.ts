@@ -1,40 +1,51 @@
 import { supabaseAdmin } from "../../supabase/client";
 import { io } from "../socket";
 
-export async function handleRoomEvent(event) {
-  const { deviceId, type, payload } = event;
+// Strongly type the incoming event
+export interface RoomEvent {
+  deviceId: string;
+  type: "motion_detected" | "user_left" | string;
+  payload?: any;
+}
 
-  // fetch device → room
-  const { data: device } = await supabaseAdmin
+export async function handleRoomEvent(event: RoomEvent) {
+  const { deviceId, type } = event;
+
+  // Fetch device → room
+  const { data: device, error: deviceError } = await supabaseAdmin
     .from("devices")
     .select("*, room_id")
     .eq("external_id", deviceId)
     .single();
 
-  if (!device?.room_id) return;
+  if (deviceError || !device?.room_id) {
+    console.warn("Device or room not found for event:", event);
+    return;
+  }
 
-  // fetch room profile
-  const { data: room } = await supabaseAdmin
+  // Fetch room profile
+  const { data: room, error: roomError } = await supabaseAdmin
     .from("rooms")
     .select("*")
     .eq("id", device.room_id)
     .single();
 
-  // AI behaviors
-  if (type === "motion_detected") {
-    if (room.ai_profile?.auto_lights) {
-      io.to(`room:${room.id}`).emit("ai:light:on", {
-        roomId: room.id,
-        reason: "motion_detected"
-      });
-    }
+  if (roomError || !room) {
+    console.warn("Room not found for device:", deviceId);
+    return;
   }
 
-  if (type === "user_left") {
-    if (room.ai_profile?.energy_save_mode) {
-      io.to(`room:${room.id}`).emit("ai:power:save", {
-        roomId: room.id
-      });
-    }
+  // AI behaviors
+  if (type === "motion_detected" && room.ai_profile?.auto_lights) {
+    io.to(`room:${room.id}`).emit("ai:light:on", {
+      roomId: room.id,
+      reason: "motion_detected",
+    });
+  }
+
+  if (type === "user_left" && room.ai_profile?.energy_save_mode) {
+    io.to(`room:${room.id}`).emit("ai:power:save", {
+      roomId: room.id,
+    });
   }
 }
