@@ -10,18 +10,27 @@ export async function processEvent(event: EventPayload): Promise<Suggestion | nu
     const suggestion = evaluateEvent(event);
 
     if (suggestion) {
-      // Map camelCase → snake_case for Supabase/PostgREST
-      const fullSuggestion = {
-        estate_id: suggestion.estateId || "default_estate",
-        device_id: suggestion.deviceId || "unknown_device",
-        rule_id: suggestion.ruleId || "default_rule",
+      // Keep camelCase for TypeScript
+      const fullSuggestion: Suggestion = {
+        estateId: suggestion.estateId || "default_estate",
+        deviceId: suggestion.deviceId || "unknown_device",
+        ruleId: suggestion.ruleId || "default_rule",
         message: suggestion.message,
         action: suggestion.action,
         payload: suggestion.payload || {},
         status: suggestion.status || "pending",
       };
 
-      await DecisionEngine.createSuggestion(fullSuggestion);
+      // Map to snake_case only when sending to DB
+      await DecisionEngine.createSuggestion({
+        estate_id: fullSuggestion.estateId,
+        device_id: fullSuggestion.deviceId,
+        rule_id: fullSuggestion.ruleId,
+        message: fullSuggestion.message,
+        action: fullSuggestion.action,
+        payload: fullSuggestion.payload,
+        status: fullSuggestion.status,
+      });
     }
 
     return suggestion;
@@ -46,7 +55,6 @@ export function startEventProcessor() {
   mqttClient.on("message", (topic, message) => {
     try {
       const event: EventPayload = JSON.parse(message.toString());
-
       processEvent(event).catch((err) => {
         console.error("Error processing MQTT event:", err);
       });
