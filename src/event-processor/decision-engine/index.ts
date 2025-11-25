@@ -2,6 +2,14 @@
 import { supabaseAdmin as supabase } from "../../supabase/client";
 import { io } from "../../server";
 
+// Event type for rules
+export interface Event {
+  deviceId: string;
+  eventType: string;
+  payload: any;
+  timestamp?: Date;
+}
+
 // Suggestion interface
 export interface Suggestion {
   estateId: string;
@@ -25,13 +33,10 @@ export class DecisionEngine {
 
     if (error) throw error;
 
-    // Emit to frontend via Socket.IO
     io.to(suggestion.estateId).emit("suggestion:new", data);
-
     return data;
   }
 
-  // Accept suggestion
   static async acceptSuggestion(id: string) {
     const { data: suggestion, error: fetchErr } = await supabase
       .from("suggestions")
@@ -50,7 +55,6 @@ export class DecisionEngine {
     return { ok: true, action: suggestion.action, payload: suggestion.payload, deviceId: suggestion.deviceId };
   }
 
-  // Dismiss suggestion
   static async dismissSuggestion(id: string) {
     const { data: suggestion } = await supabase
       .from("suggestions")
@@ -68,3 +72,21 @@ export class DecisionEngine {
     return { ok: true };
   }
 }
+
+// Example simple rule evaluation function
+export function evaluateEvent(event: Event): Suggestion | null {
+  // Dummy example: if motion detected, create notify suggestion
+  if (event.eventType === "motion_detected") {
+    return {
+      estateId: "default_estate",
+      deviceId: event.deviceId,
+      message: "Motion detected",
+      action: "notify",
+      status: "pending",
+    };
+  }
+  return null;
+}
+
+// EventPayload type (alias to Event for clarity)
+export type EventPayload = Event;
