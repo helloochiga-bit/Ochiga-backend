@@ -1,5 +1,5 @@
 import { rules } from "./rules.ts";
-import { pushSuggestion, publishCommand } from "./actions.js";
+import { pushSuggestion, publishCommand } from "./actions.ts";
 
 export function evaluateRules(event) {
   console.log("🧠 Evaluating rules for event:", event.event_type);
