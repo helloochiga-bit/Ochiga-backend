@@ -1,8 +1,9 @@
 // src/event-processor/rule-engine/rules.ts
 
 export interface EventPayload {
-  event_type: string;
-  deviceId: string;
+  event_type: string;   // snake_case
+  device_id: string;    // snake_case
+  estate_id?: string;   // optional, if available
   data?: any;
 }
 
@@ -61,7 +62,7 @@ export const rules: Rule[] = [
       type: "suggestion",
       message: "Late night motion detected at your door",
       target_user: event.data?.user_id,
-      metadata: { device_id: event.deviceId, rule_triggered: "suspicious_motion_alert" },
+      metadata: { device_id: event.device_id, rule_triggered: "suspicious_motion_alert" },
     }),
   },
   {
