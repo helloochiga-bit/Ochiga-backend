@@ -1,6 +1,6 @@
 // src/event-processor/handlers/rooms.ts
 import { supabaseAdmin } from "../../supabase/client";
-import { io } from "../server";
+import { io } from "../../server";  // ✅ FIXED PATH
 
 export interface RoomEvent {
   deviceId: string;
@@ -11,14 +11,16 @@ export interface RoomEvent {
 export async function handleRoomEvent(event: RoomEvent) {
   const { deviceId, type } = event;
 
+  // Get device → must have room_id
   const { data: device, error: deviceError } = await supabaseAdmin
     .from("devices")
-    .select("*, room_id")
+    .select("id, external_id, room_id")
     .eq("external_id", deviceId)
     .single();
 
   if (deviceError || !device?.room_id) return;
 
+  // Fetch the room + AI profile
   const { data: room, error: roomError } = await supabaseAdmin
     .from("rooms")
     .select("*")
@@ -27,11 +29,18 @@ export async function handleRoomEvent(event: RoomEvent) {
 
   if (roomError || !room) return;
 
+  // ⚡ Handle Motion Events
   if (type === "motion_detected" && room.ai_profile?.auto_lights) {
-    io.to(`room:${room.id}`).emit("ai:light:on", { roomId: room.id, reason: "motion_detected" });
+    io.to(`room:${room.id}`).emit("ai:light:on", {
+      roomId: room.id,
+      reason: "motion_detected",
+    });
   }
 
+  // ⚡ Handle User Leaving
   if (type === "user_left" && room.ai_profile?.energy_save_mode) {
-    io.to(`room:${room.id}`).emit("ai:power:save", { roomId: room.id });
+    io.to(`room:${room.id}`).emit("ai:power:save", {
+      roomId: room.id,
+    });
   }
 }
