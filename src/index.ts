@@ -4,7 +4,7 @@ import { PORT, logPortBinding } from "./config/env";
 import { startEventProcessor } from "./event-processor/eventProcessor";
 import { initRuleEngine } from "./event-processor/rule-engine/rules";
 
-import { redis } from "./config/redis";
+import redis from "./config/redis"; // FIXED IMPORT
 
 // ----------------------------------------------------
 // INITIALIZE BACKGROUND SERVICES
@@ -16,7 +16,7 @@ import { redis } from "./config/redis";
     // Connect Redis
     await redis.connect();
 
-    // Start MQTT Event Processor (NO await)
+    // Start MQTT Event Processor
     startEventProcessor();
 
     // Load rule engine into memory
@@ -31,20 +31,22 @@ import { redis } from "./config/redis";
 // ----------------------------------------------------
 // START EXPRESS SERVER
 // ----------------------------------------------------
-const server = app.listen(PORT, () => {
-  logPortBinding(PORT);
-});
+function startServer(port: number) {
+  const server = app.listen(port, () => {
+    logPortBinding(port);
+  });
 
-// Handle port conflicts gracefully
-server.on("error", (err: any) => {
-  if (err.code === "EADDRINUSE") {
-    console.warn(`⚠️ Port ${PORT} is in use. Attempting to bind to a random free port...`);
+  // Only retry ONE TIME if main port is taken
+  server.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE") {
+      console.warn(`⚠️ Port ${port} in use. Retrying with a free port...`);
 
-    server.listen(0, () => {
-      const actualPort = (server.address() as any).port;
-      logPortBinding(actualPort);
-    });
-  } else {
-    console.error(err);
-  }
-});
+      // Create a NEW SERVER instead of calling listen() again
+      startServer(0);
+    } else {
+      console.error("❌ Server error:", err);
+    }
+  });
+}
+
+startServer(PORT);
