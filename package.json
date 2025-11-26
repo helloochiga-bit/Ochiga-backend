@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc -p .",
-    "start": "node dist/index.js",
+    "start": "node dist/server.js",
     "lint": "eslint . --ext .ts",
     "events:dev": "node ./src/event-processor/index.js",
     "events:start": "node ./dist/event-processor/index.js"
