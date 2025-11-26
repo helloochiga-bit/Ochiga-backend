@@ -17,6 +17,11 @@ app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 
+// Root Route
+app.get("/", (req, res) => {
+  res.send("🔥 Ochiga Backend API is running");
+});
+
 // Health Check
 app.get("/health", (req, res) => {
   res.json({
@@ -26,13 +31,14 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Mount Routes (ONLY HERE)
+// Mount Routes
 app.use("/auth", authRoutes);
 app.use("/auth/onboard", onboardingRoutes);
 app.use("/estates", estatesRoutes);
 app.use("/residents", residentsRoutes);
 app.use("/devices", devicesRoutes);
 
+// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     status: "error",
