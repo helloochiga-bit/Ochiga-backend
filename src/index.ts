@@ -1,4 +1,5 @@
 // src/index.ts
+
 import app from "./app";
 import { PORT, logPortBinding } from "./config/env";
 
@@ -17,10 +18,10 @@ import { redis } from "./config/redis";
     // Connect to Redis
     await redis.connect();
 
-    // Start MQTT event processor (non-blocking)
+    // Start MQTT event processor (NO await — do not block)
     startEventProcessor();
 
-    // Load rule engine
+    // Load rule engine rules into memory
     initRuleEngine();
 
     console.log("✅ Background services running.");
@@ -30,23 +31,8 @@ import { redis } from "./config/redis";
 })();
 
 // ----------------------------------------------------
-// START EXPRESS SERVER
+// START EXPRESS SERVER (NO FALLBACK PORT LOGIC)
 // ----------------------------------------------------
-const server = app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   logPortBinding(PORT);
-});
-
-// Handle port conflicts
-server.on("error", (err: any) => {
-  if (err.code === "EADDRINUSE") {
-    console.warn(`⚠️ Port ${PORT} is in use. Trying a new port...`);
-
-    const newServer = app.listen(0, () => {
-      const actualPort = (newServer.address() as any).port;
-      logPortBinding(actualPort);
-    });
-
-  } else {
-    console.error("Server error:", err);
-  }
 });
