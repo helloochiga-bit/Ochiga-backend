@@ -12,7 +12,19 @@ import onboardingRoutes from "./routes/onboarding";
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: true, credentials: true }));
+
+// ⭐ FIXED CORS FOR CODESPACES ⭐
+app.use(
+  cors({
+    origin: [
+      "https://*.github.dev",
+      "https://orange-happiness-v69p65qw4x67cppv5-3000.app.github.dev",
+      "http://localhost:3000",
+    ],
+    credentials: true,
+  })
+);
+
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
