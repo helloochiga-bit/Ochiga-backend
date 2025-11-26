@@ -13,9 +13,13 @@ import { redis } from "./config/redis";
   try {
     console.log("⚡ Initializing background services...");
 
-    await redis.connect(); // <--- FIXED
+    // Connect Redis
+    await redis.connect();
 
-    await startEventProcessor();
+    // Start MQTT Event Processor (NO await)
+    startEventProcessor();
+
+    // Load rule engine into memory
     initRuleEngine();
 
     console.log("✅ Background services running.");
@@ -31,6 +35,7 @@ const server = app.listen(PORT, () => {
   logPortBinding(PORT);
 });
 
+// Handle port conflicts gracefully
 server.on("error", (err: any) => {
   if (err.code === "EADDRINUSE") {
     console.warn(`⚠️ Port ${PORT} is in use. Attempting to bind to a random free port...`);
