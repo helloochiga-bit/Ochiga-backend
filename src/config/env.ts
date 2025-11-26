@@ -1,6 +1,8 @@
+// src/config/env.ts
 import dotenv from "dotenv";
 dotenv.config();
 
+// Safely read environment variables
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -10,20 +12,28 @@ function requireEnv(name: string): string {
   return value;
 }
 
-// Use PORT from environment, fallback to 5000
-export const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5000;
+// -------------------------------------------
+// PORT CONFIG — safe and strict
+// -------------------------------------------
+export const PORT: number = process.env.PORT
+  ? Number(process.env.PORT)
+  : 5000;
 
-// Supabase
+// -------------------------------------------
+// SUPABASE CONFIG
+// -------------------------------------------
 export const SUPABASE_URL = requireEnv("SUPABASE_URL");
 export const SUPABASE_ANON_KEY = requireEnv("SUPABASE_ANON_KEY");
 export const SUPABASE_SERVICE_ROLE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 
-// JWT secret
+// -------------------------------------------
+// JWT
+// -------------------------------------------
 export const APP_JWT_SECRET = requireEnv("APP_JWT_SECRET");
 
-/**
- * Utility to log which port the app actually binds to
- */
-export function logPortBinding(actualPort: number) {
-  console.log(`✅ Ochiga backend is listening on 0.0.0.0:${actualPort}`);
+// -------------------------------------------
+// UTILITY — consistent port log
+// -------------------------------------------
+export function logPortBinding(port: number) {
+  console.log(`🚀 Ochiga backend is listening on http://0.0.0.0:${port}`);
 }
