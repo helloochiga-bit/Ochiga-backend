@@ -2,63 +2,93 @@
 import http from "http";
 import { Server as IOServer } from "socket.io";
 import dotenv from "dotenv";
-
-// Load env variables
 dotenv.config();
 
-import app from "./app"; // ✅ import the Express app directly
+// EXPRESS APP
+import app from "./app";
+
+// ENV + PORT CONFIG
+import { PORT } from "./config/env";
+
+// BACKGROUND SERVICES
+import { redis } from "./config/redis";
+import { startEventProcessor } from "./event-processor/eventProcessor";
+import { initRuleEngine } from "./event-processor/rule-engine/rules";
+
+// MQTT BRIDGE
 import { initMqttBridge } from "./device/bridge";
+
+// WORKERS
 import { startWorkers } from "./workers/automationWorker";
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 5000;
-
-// ─── HTTP + WebSocket Server ─────────────────
+// ---------------------------
+// HTTP + WEBSOCKET SERVER
+// ---------------------------
 const httpServer = http.createServer(app);
 
 export const io = new IOServer(httpServer, {
-  cors: { origin: true, credentials: true },
+  cors: {
+    origin: true,
+    credentials: true,
+  },
 });
 
-// Socket.IO — estate-specific and user-specific channels
+// Socket.io Connection
 io.on("connection", (socket) => {
-  console.log("Socket connected:", socket.id);
+  console.log("Socket connected →", socket.id);
 
-  // Estate subscription
   socket.on("subscribe:estate", (estateId: string) => {
     socket.join(`estate:${estateId}`);
   });
 
-  socket.on("unsubscribe:estate", (estateId: string) => {
-    socket.leave(`estate:${estateId}`);
-  });
-
-  // User subscription (for real-time notifications)
   socket.on("subscribe:user", (userId: string) => {
     socket.join(`user:${userId}`);
   });
-
-  socket.on("unsubscribe:user", (userId: string) => {
-    socket.leave(`user:${userId}`);
-  });
 });
 
-// ─── Start Server ────────────────────────────
+// ---------------------------
+// START SERVER + SERVICES
+// ---------------------------
 httpServer.listen(PORT, async () => {
-  console.log(`HTTP + WS server listening on port ${PORT}`);
+  console.log(`🚀 HTTP + WebSocket server running on port ${PORT}`);
 
-  // Initialize MQTT bridge
+  // Connect Redis
   try {
-    await initMqttBridge();
-    console.log("MQTT bridge initialized");
-  } catch (err) {
-    console.error("MQTT bridge failed to initialize", err);
+    await redis.connect();
+    console.log("🟢 Redis connected");
+  } catch (error) {
+    console.error("🔴 Redis connection failed →", error);
   }
 
-  // Start worker processes (BullMQ)
+  // Start MQTT Event Processor
+  try {
+    startEventProcessor(); // no await → non-blocking
+    console.log("🟢 Event processor started");
+  } catch (error) {
+    console.error("🔴 Event processor failed →", error);
+  }
+
+  // Load Rule Engine
+  try {
+    initRuleEngine();
+    console.log("🟢 Rule engine initialized");
+  } catch (error) {
+    console.error("🔴 Rule engine failed →", error);
+  }
+
+  // Start MQTT Bridge
+  try {
+    await initMqttBridge();
+    console.log("🟢 MQTT bridge initialized");
+  } catch (error) {
+    console.error("🔴 MQTT bridge failed →", error);
+  }
+
+  // Start BullMQ Workers
   try {
     await startWorkers();
-    console.log("Workers started");
-  } catch (err) {
-    console.error("Workers failed to start", err);
+    console.log("🟢 Workers started");
+  } catch (error) {
+    console.error("🔴 Worker startup failed →", error);
   }
 });
