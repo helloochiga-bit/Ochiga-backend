@@ -1,18 +1,17 @@
+// src/config/redis.ts
 import { createClient } from "redis";
 
-const redisClient = createClient({
+export const redis = createClient({
   socket: {
     host: process.env.REDIS_HOST || "redis",
-    port: parseInt(process.env.REDIS_PORT || "6379")
-  }
+    port: parseInt(process.env.REDIS_PORT || "6379", 10),
+  },
 });
 
-redisClient.on("connect", () => {
+redis.on("connect", () => {
   console.log("✅ Redis connected");
 });
 
-redisClient.on("error", (err) => {
+redis.on("error", (err) => {
   console.error("❌ Redis Error:", err);
 });
-
-export default redisClient;
