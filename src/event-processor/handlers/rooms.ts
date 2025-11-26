@@ -1,6 +1,6 @@
 // src/event-processor/handlers/rooms.ts
 import { supabaseAdmin } from "../../supabase/client";
-import { io } from "../socket";
+import { io } from "../server";
 
 export interface RoomEvent {
   deviceId: string;
