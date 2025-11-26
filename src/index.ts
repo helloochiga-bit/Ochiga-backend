@@ -1,19 +1,10 @@
 import app from "./app";
 import { PORT, logPortBinding } from "./config/env";
 
-// 👉 ROUTES
-import estatesRoutes from "./routes/estates";
-import onboardingRoutes from "./routes/onboarding";
-
-// 👉 SERVICES
 import { startEventProcessor } from "./event-processor/eventProcessor";
 import { initRuleEngine } from "./event-processor/rule-engine/rules";
 
-// ----------------------------------------------------
-// ROUTE MOUNTING
-// ----------------------------------------------------
-app.use("/api/estates", estatesRoutes);
-app.use("/auth/onboard", onboardingRoutes);
+import { redis } from "./config/redis";
 
 // ----------------------------------------------------
 // INITIALIZE BACKGROUND SERVICES
@@ -22,10 +13,9 @@ app.use("/auth/onboard", onboardingRoutes);
   try {
     console.log("⚡ Initializing background services...");
 
-    // Start event processor
-    await startEventProcessor(); // now works even if you later make it async
+    await redis.connect(); // <--- FIXED
 
-    // Initialize rule engine in memory
+    await startEventProcessor();
     initRuleEngine();
 
     console.log("✅ Background services running.");
@@ -41,9 +31,6 @@ const server = app.listen(PORT, () => {
   logPortBinding(PORT);
 });
 
-// ----------------------------------------------------
-// HANDLE PORT CONFLICTS
-// ----------------------------------------------------
 server.on("error", (err: any) => {
   if (err.code === "EADDRINUSE") {
     console.warn(`⚠️ Port ${PORT} is in use. Attempting to bind to a random free port...`);
