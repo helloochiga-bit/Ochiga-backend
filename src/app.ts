@@ -11,16 +11,14 @@ import onboardingRoutes from "./routes/onboarding";
 
 const app = express();
 
-// Security headers
 app.use(helmet());
 
-// ⭐ FIXED CORS FOR GITHUB CODESPACES ⭐
-// Allows ANY `*.github.dev` frontend to reach your backend
+// ⭐ FIXED CORS FOR CODESPACES ⭐
 app.use(
   cors({
     origin: [
-      /\.github\.dev$/,             // Allow all GitHub Codespaces frontends
-      "http://localhost:3000",      // Local dev
+      "https://crispy-succotash-x5799wg49j5qhpxx6-3000.app.github.dev", // frontend
+      "http://localhost:3000", // local dev
     ],
     credentials: true,
   })
