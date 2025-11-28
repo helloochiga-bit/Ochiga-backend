@@ -13,12 +13,12 @@ const app = express();
 
 app.use(helmet());
 
-// ⭐ FIXED CORS FOR CODESPACES ⭐
 app.use(
   cors({
     origin: [
-      "https://crispy-succotash-x5799wg49j5qhpxx6-3000.app.github.dev", // frontend
-      "http://localhost:3000", // local dev
+      "https://crispy-succotash-x5799wg49j5qhpxx6-3000.app.github.dev",
+      /\.github\.dev$/, // allow all Codespace subdomains
+      "http://localhost:3000"
     ],
     credentials: true,
   })
