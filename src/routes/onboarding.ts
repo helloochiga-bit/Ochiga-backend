@@ -1,56 +1,33 @@
-import express from "express";
-import { supabaseAdmin } from "../supabase/client";
+import { Router } from "express";
 import bcrypt from "bcrypt";
+import supabaseAdmin from "../lib/supabase";
 
-const router = express.Router();
+const router = Router();
 
-router.post("/:token", async (req, res) => {
-  const token = req.params.token;
-  const { username, password } = req.body;
+router.post("/complete", async (req, res) => {
+  try {
+    const { user_id, username, password } = req.body;
 
-  if (!username || !password) {
-    return res.status(400).json({ error: "username and password required" });
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .update({
+        username,
+        password_hash: hashedPassword,
+        onboarding_complete: true,
+      })
+      .eq("id", user_id)
+      .select()
+      .single();
+
+    if (error) return res.status(400).json({ error: error.message });
+
+    res.json({ message: "Onboarding complete", user: data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Unexpected server error" });
   }
-
-  // 1️⃣ Check token validity
-  const { data: tokenRow, error: tokenError } = await supabaseAdmin
-    .from("onboarding_tokens")
-    .select("*")
-    .eq("token", token)
-    .eq("used", false)
-    .single();
-
-  if (tokenError || !tokenRow) {
-    return res.status(400).json({ error: "Invalid or expired token" });
-  }
-
-  const userId = tokenRow.user_id;
-
-  // 2️⃣ Hash password
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  // 3️⃣ Update user account
-  const { error: updateError } = await supabaseAdmin
-    .from("users")
-    .update({
-      username,
-      password: hashedPassword,
-    })
-    .eq("id", userId);
-
-  if (updateError) {
-    return res.status(500).json({ error: updateError.message });
-  }
-
-  // 4️⃣ Mark token as used
-  await supabaseAdmin
-    .from("onboarding_tokens")
-    .update({ used: true })
-    .eq("id", tokenRow.id);
-
-  return res.json({
-    message: "Onboarding complete. User activated successfully.",
-  });
 });
 
 export default router;
