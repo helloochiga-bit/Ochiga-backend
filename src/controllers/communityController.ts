@@ -2,7 +2,11 @@
 import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase/supabaseClient";
 import { NotificationService } from "../services/NotificationService";
+import { AuthRequest } from "../middleware/auth";
 
+// =============================
+// POSTS
+// =============================
 export async function createPost(req: AuthRequest, res: Response) {
   const { title, content, media, poll, estateId } = req.body;
   const userId = req.user!.id;
@@ -43,7 +47,77 @@ export async function getPostsForEstate(req: AuthRequest, res: Response) {
   res.json(data);
 }
 
+export async function getPostById(req: AuthRequest, res: Response) {
+  const postId = req.params.postId;
+
+  const { data, error } = await supabaseAdmin
+    .from("community_posts")
+    .select("*")
+    .eq("id", postId)
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}
+
+export async function updatePost(req: AuthRequest, res: Response) {
+  const postId = req.params.postId;
+  const userId = req.user!.id;
+  const { title, content, media, poll } = req.body;
+
+  const { data: existingPost, error: fetchError } = await supabaseAdmin
+    .from("community_posts")
+    .select("*")
+    .eq("id", postId)
+    .single();
+
+  if (fetchError || !existingPost)
+    return res.status(404).json({ error: "Post not found" });
+
+  if (existingPost.user_id !== userId)
+    return res.status(403).json({ error: "Unauthorized" });
+
+  const { data, error } = await supabaseAdmin
+    .from("community_posts")
+    .update({ title, content, media, poll, updated_at: new Date().toISOString() })
+    .eq("id", postId)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}
+
+export async function deletePost(req: AuthRequest, res: Response) {
+  const postId = req.params.postId;
+  const userId = req.user!.id;
+
+  const { data: existingPost, error: fetchError } = await supabaseAdmin
+    .from("community_posts")
+    .select("*")
+    .eq("id", postId)
+    .single();
+
+  if (fetchError || !existingPost)
+    return res.status(404).json({ error: "Post not found" });
+
+  if (existingPost.user_id !== userId)
+    return res.status(403).json({ error: "Unauthorized" });
+
+  const { data, error } = await supabaseAdmin
+    .from("community_posts")
+    .update({ status: "deleted", updated_at: new Date().toISOString() })
+    .eq("id", postId)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}
+
+// =============================
 // COMMENTS
+// =============================
 export async function createComment(req: AuthRequest, res: Response) {
   const postId = req.params.postId;
   const { content, parent_comment_id } = req.body;
@@ -80,4 +154,145 @@ export async function createComment(req: AuthRequest, res: Response) {
   }
 }
 
-// Add other controller methods similarly (update/delete post, react, etc.)
+export async function getCommentsForPost(req: AuthRequest, res: Response) {
+  const postId = req.params.postId;
+
+  const { data, error } = await supabaseAdmin
+    .from("community_comments")
+    .select("*")
+    .eq("post_id", postId)
+    .order("created_at", { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}
+
+export async function updateComment(req: AuthRequest, res: Response) {
+  const commentId = req.params.commentId;
+  const userId = req.user!.id;
+  const { content } = req.body;
+
+  const { data: comment, error: fetchError } = await supabaseAdmin
+    .from("community_comments")
+    .select("*")
+    .eq("id", commentId)
+    .single();
+
+  if (fetchError || !comment)
+    return res.status(404).json({ error: "Comment not found" });
+
+  if (comment.user_id !== userId)
+    return res.status(403).json({ error: "Unauthorized" });
+
+  const { data, error } = await supabaseAdmin
+    .from("community_comments")
+    .update({ content, updated_at: new Date().toISOString() })
+    .eq("id", commentId)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}
+
+export async function deleteComment(req: AuthRequest, res: Response) {
+  const commentId = req.params.commentId;
+  const userId = req.user!.id;
+
+  const { data: comment, error: fetchError } = await supabaseAdmin
+    .from("community_comments")
+    .select("*")
+    .eq("id", commentId)
+    .single();
+
+  if (fetchError || !comment)
+    return res.status(404).json({ error: "Comment not found" });
+
+  if (comment.user_id !== userId)
+    return res.status(403).json({ error: "Unauthorized" });
+
+  const { data, error } = await supabaseAdmin
+    .from("community_comments")
+    .delete()
+    .eq("id", commentId)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}
+
+// =============================
+// REACTIONS
+// =============================
+export async function reactToPost(req: AuthRequest, res: Response) {
+  const postId = req.params.postId;
+  const userId = req.user!.id;
+  const { type } = req.body;
+
+  const { data, error } = await supabaseAdmin
+    .from("community_reactions")
+    .upsert(
+      { post_id: postId, user_id: userId, type },
+      { onConflict: ["post_id", "user_id"] }
+    )
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}
+
+export async function reactToComment(req: AuthRequest, res: Response) {
+  const commentId = req.params.commentId;
+  const userId = req.user!.id;
+  const { type } = req.body;
+
+  const { data, error } = await supabaseAdmin
+    .from("community_reactions")
+    .upsert(
+      { comment_id: commentId, user_id: userId, type },
+      { onConflict: ["comment_id", "user_id"] }
+    )
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}
+
+// =============================
+// POLL VOTE
+// =============================
+export async function votePoll(req: AuthRequest, res: Response) {
+  const postId = req.params.postId;
+  const { option } = req.body;
+  const userId = req.user!.id;
+
+  const { data: post, error: fetchError } = await supabaseAdmin
+    .from("community_posts")
+    .select("*")
+    .eq("id", postId)
+    .single();
+
+  if (fetchError || !post) return res.status(404).json({ error: "Post not found" });
+
+  if (!post.poll || !post.poll.options) return res.status(400).json({ error: "No poll found" });
+
+  const poll = post.poll;
+  const optionIndex = poll.options.findIndex((o: any) => o.option === option);
+
+  if (optionIndex === -1) return res.status(400).json({ error: "Invalid option" });
+
+  poll.options[optionIndex].votes += 1;
+
+  const { data, error } = await supabaseAdmin
+    .from("community_posts")
+    .update({ poll, updated_at: new Date().toISOString() })
+    .eq("id", postId)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}
