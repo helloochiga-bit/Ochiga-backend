@@ -1,15 +1,20 @@
+// src/services/qrService.ts
+
 import QRCode from "qrcode";
-import { uploadToS3 } from "./s3Service";
+import { uploadToS3 } from "../utils/s3Upload";
 
-export async function createQrForLink(link: string) {
-  const qrPng = await QRCode.toBuffer(link, { type: "png", width: 600 });
-  const filename = `qr_${Date.now()}.png`;
+export async function createQrForLink(link: string, visitorId: string): Promise<string> {
+  // generate QR png buffer
+  const qrBuffer = await QRCode.toBuffer(link, {
+    errorCorrectionLevel: "H",
+    type: "png",
+    margin: 1,
+    width: 600
+  });
 
-  const url = await uploadToS3(filename, qrPng, "image/png");
+  // upload to S3
+  const key = `visitors/qr/${visitorId}.png`;
+  const url = await uploadToS3(qrBuffer, key, "image/png");
 
-  return { filename, url };
-}
-
-export function getQrS3Url(filename: string) {
-  return `https://your-s3-bucket.s3.amazonaws.com/${filename}`;
+  return url;
 }
