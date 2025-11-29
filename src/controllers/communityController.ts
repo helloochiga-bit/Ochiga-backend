@@ -1,26 +1,3 @@
-src/controllers/communityContro Iler.ts: 26:29 - error TS2339: P roperty 'full_name' does not ex ist on type 'Authuser' 26
-message: ${req.user!.
-full_ name} posted: §{title}'
-src/controllers/communityContro ller.ts:145:31 - error TS2339:
-Property 'full name' does not e xist on type 'AuthUser'.
-145
-message: '${req.use
-I!. full_
-_name› commented on your
-post'
-SUG
-Bu
-Sh
-～~
-src/controllers/communityContro ller.ts: 235:6 - error TS2769: N
-• overload
-matches this call.
-Overload 1 of 2, '(values: {
-post_id: string; user_id: strin
-g; type: any; }, options?: {on Conflict?: string | undefined; ignoreDuplicates?: boolean | un
-
-src/controllers/communityController.ts
-
 // src/controllers/communityController.ts
 import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase/supabaseClient";
