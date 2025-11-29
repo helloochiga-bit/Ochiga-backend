@@ -1,6 +1,6 @@
 // src/routes/geo.ts
 import { Router } from "express";
-import { requireAuth, AuthedRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
 import { setEstateLocation, updateVisitorLocation } from "../controllers/geoController";
 
 const router = Router();
