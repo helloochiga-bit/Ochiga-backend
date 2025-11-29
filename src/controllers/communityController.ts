@@ -10,6 +10,7 @@ import { AuthRequest } from "../middleware/auth";
 export async function createPost(req: AuthRequest, res: Response) {
   const { title, content, media, poll, estateId } = req.body;
   const userId = req.user!.id;
+  const username = req.user!.username;
 
   try {
     const { data, error } = await supabaseAdmin
@@ -23,7 +24,7 @@ export async function createPost(req: AuthRequest, res: Response) {
     // Notify estate residents
     await NotificationService.sendToEstate(estateId, {
       title: "New Community Post",
-      message: `${req.user!.full_name} posted: ${title}`,
+      message: `${username} posted: ${title}`,
       type: "community",
       payload: { postId: data.id },
     });
@@ -122,6 +123,7 @@ export async function createComment(req: AuthRequest, res: Response) {
   const postId = req.params.postId;
   const { content, parent_comment_id } = req.body;
   const userId = req.user!.id;
+  const username = req.user!.username;
 
   try {
     const { data, error } = await supabaseAdmin
@@ -142,7 +144,7 @@ export async function createComment(req: AuthRequest, res: Response) {
     if (post && post.user_id !== userId) {
       await NotificationService.sendToUser(post.user_id, {
         title: "New Comment",
-        message: `${req.user!.full_name} commented on your post`,
+        message: `${username} commented on your post`,
         type: "community",
         payload: { postId, commentId: data.id },
       });
@@ -230,17 +232,21 @@ export async function reactToPost(req: AuthRequest, res: Response) {
   const userId = req.user!.id;
   const { type } = req.body;
 
-  const { data, error } = await supabaseAdmin
-    .from("community_reactions")
-    .upsert(
-      { post_id: postId, user_id: userId, type },
-      { onConflict: ["post_id", "user_id"] }
-    )
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("community_reactions")
+      .upsert(
+        { post_id: postId, user_id: userId, type },
+        { onConflict: ["post_id", "user_id"], ignoreDuplicates: false }
+      )
+      .select()
+      .single();
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 }
 
 export async function reactToComment(req: AuthRequest, res: Response) {
@@ -248,17 +254,21 @@ export async function reactToComment(req: AuthRequest, res: Response) {
   const userId = req.user!.id;
   const { type } = req.body;
 
-  const { data, error } = await supabaseAdmin
-    .from("community_reactions")
-    .upsert(
-      { comment_id: commentId, user_id: userId, type },
-      { onConflict: ["comment_id", "user_id"] }
-    )
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("community_reactions")
+      .upsert(
+        { comment_id: commentId, user_id: userId, type },
+        { onConflict: ["comment_id", "user_id"], ignoreDuplicates: false }
+      )
+      .select()
+      .single();
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 }
 
 // =============================
