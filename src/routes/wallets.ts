@@ -1,7 +1,7 @@
 // src/routes/wallets.ts
 import express from "express";
 import { requireAuth, AuthRequest } from "../middleware/auth";
-import { supabaseAdmin } from "../supabase/client";
+import { supabaseAdmin } from "../supabase/supabaseClient"; // fixed path
 import axios from "axios";
 import crypto from "crypto";
 
@@ -21,9 +21,8 @@ const paystack = axios.create({
 // =============================
 // GET WALLET BALANCE
 // =============================
-router.get("/", requireAuth, async (req, res) => {
-  const authedReq = req as AuthedRequest;
-  const userId = authedReq.user!.id;
+router.get("/", requireAuth, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
 
   const { data, error } = await supabaseAdmin
     .from("wallets")
@@ -38,18 +37,15 @@ router.get("/", requireAuth, async (req, res) => {
 // =============================
 // INIT PAYSTACK PAYMENT
 // =============================
-router.post("/init", requireAuth, async (req, res) => {
-  const authedReq = req as AuthedRequest;
-  const userId = authedReq.user!.id;
+router.post("/init", requireAuth, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
   const { amount, email } = req.body;
 
   try {
     const response = await paystack.post("/transaction/initialize", {
       email,
       amount: Number(amount) * 100,
-      metadata: {
-        userId,
-      },
+      metadata: { userId },
     });
 
     res.json(response.data);
@@ -78,7 +74,6 @@ router.post(
 
     const event = JSON.parse(req.body.toString());
 
-    // We only care about charge.success
     if (event.event === "charge.success") {
       const data = event.data;
       const userId = data.metadata.userId;
@@ -116,11 +111,10 @@ router.post(
 );
 
 // =============================
-// MANUAL CREDIT (rarely used when Paystack exists)
+// MANUAL CREDIT
 // =============================
-router.post("/credit", requireAuth, async (req, res) => {
-  const authedReq = req as AuthedRequest;
-  const userId = authedReq.user!.id;
+router.post("/credit", requireAuth, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
   const { amount, reference } = req.body;
 
   const { data: wallet, error: walletError } = await supabaseAdmin
@@ -160,9 +154,8 @@ router.post("/credit", requireAuth, async (req, res) => {
 // =============================
 // DEBIT
 // =============================
-router.post("/debit", requireAuth, async (req, res) => {
-  const authedReq = req as AuthedRequest;
-  const userId = authedReq.user!.id;
+router.post("/debit", requireAuth, async (req: AuthRequest, res) => {
+  const userId = req.user!.id;
   const { amount, reference } = req.body;
 
   const { data: wallet, error: walletError } = await supabaseAdmin
