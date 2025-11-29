@@ -1,6 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
-import supabaseAdmin from "../lib/supabase";
+import { supabaseAdmin } from "../supabase/supabaseClient"
 
 const router = Router();
 
