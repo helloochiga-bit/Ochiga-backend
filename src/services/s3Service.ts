@@ -1,3 +1,4 @@
+// src/services/s3Service.ts
 import AWS from "aws-sdk";
 
 const s3 = new AWS.S3({
@@ -6,7 +7,7 @@ const s3 = new AWS.S3({
   region: process.env.AWS_REGION,
 });
 
-export async function uploadToS3(filename: string, buffer: Buffer, mime: string) {
+export async function uploadToS3(filename: string, buffer: Buffer, mime: string): Promise<string> {
   const params = {
     Bucket: process.env.AWS_S3_BUCKET!,
     Key: filename,
