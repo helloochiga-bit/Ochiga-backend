@@ -1,14 +1,17 @@
 // src/routes/notifications.ts
 import express from "express";
-import { requireAuth, AuthRequest } from "../middleware/auth";
-import { supabaseAdmin } from "../supabase/client";
+import { requireAuth, AuthRequest } from "../middleware/auth"; // fixed import
+import { supabaseAdmin } from "../supabase/supabaseClient"; // fixed path
 import { io } from "../server";
 
 const router = express.Router();
 
+// =============================
 // GET notifications for a user
-router.get("/", requireAuth, async (req: AuthedRequest, res) => {
+// =============================
+router.get("/", requireAuth, async (req: AuthRequest, res) => {
   const userId = req.user!.id; // non-null assertion since requireAuth ensures user exists
+
   const { data, error } = await supabaseAdmin
     .from("notifications")
     .select("*")
@@ -19,8 +22,10 @@ router.get("/", requireAuth, async (req: AuthedRequest, res) => {
   res.json(data);
 });
 
+// =============================
 // MARK notification as read
-router.post("/read/:id", requireAuth, async (req: AuthedRequest, res) => {
+// =============================
+router.post("/read/:id", requireAuth, async (req: AuthRequest, res) => {
   const { id } = req.params;
 
   const { data, error } = await supabaseAdmin
@@ -34,7 +39,9 @@ router.post("/read/:id", requireAuth, async (req: AuthedRequest, res) => {
   res.json(data);
 });
 
-// CREATE notification (used by backend events or rules engine)
+// =============================
+// CREATE notification (backend events)
+// =============================
 export async function sendNotification(userId: string, payload: any) {
   const { data, error } = await supabaseAdmin
     .from("notifications")
@@ -43,6 +50,7 @@ export async function sendNotification(userId: string, payload: any) {
     .single();
 
   if (!error && data) {
+    // Emit real-time event to user
     io.to(`user:${userId}`).emit("notification:new", data);
   }
 }
