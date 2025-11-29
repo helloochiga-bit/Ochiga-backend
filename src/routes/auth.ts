@@ -1,11 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-// Example: src/routes/auth.ts
-import { supabaseAdmin } from "../supabase/supabaseClient"; // fixed path
-
-// Example: src/routes/estates.ts
-import { supabaseAdmin } from "../supabase/supabaseClient"; // fixed path
+import { supabaseAdmin } from "../supabase/supabaseClient"; // fixed 
 
 const router = Router();
 const APP_JWT_SECRET = process.env.APP_JWT_SECRET!;
