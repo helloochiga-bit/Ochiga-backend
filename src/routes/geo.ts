@@ -1,6 +1,6 @@
 // src/routes/geo.ts
 import { Router } from "express";
-import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth"; // fixed import
 import { setEstateLocation, updateVisitorLocation } from "../controllers/geoController";
 
 const router = Router();
@@ -12,10 +12,10 @@ const router = Router();
 router.post(
   "/estate/:estateId",
   requireAuth,
-  async (req: AuthedRequest, res) => {
+  async (req: AuthRequest, res) => {
     try {
-      // You can access req.user here if needed
       const estateId = req.params.estateId;
+      // Pass typed req and res to controller
       return setEstateLocation(req, res);
     } catch (err: any) {
       console.error("Error in /geo/estate route:", err);
