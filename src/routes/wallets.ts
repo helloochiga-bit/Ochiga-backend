@@ -1,6 +1,6 @@
 // src/routes/wallets.ts
 import express from "express";
-import { requireAuth, AuthedRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
 import { supabaseAdmin } from "../supabase/client";
 import axios from "axios";
 import crypto from "crypto";
