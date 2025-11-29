@@ -1,11 +1,9 @@
 // src/controllers/visitorController.ts
-
 import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase/supabaseClient";
 import { generateAccessCode } from "../services/codeService";
 import { createQrForLink } from "../services/qrService";
-import { sendVisitorLinkNotification } from "../services/notifyService";
-import { parseISO } from "date-fns";
+import { notifyUser, NotificationPayload } from "../services/notificationService";
 
 const DEFAULT_EXPIRES_HOURS = Number(process.env.VISITOR_DEFAULT_EXPIRES_HOURS || 12);
 const VISITOR_LINK_BASE = process.env.VISITOR_LINK_BASE || "";
@@ -15,7 +13,7 @@ export async function createVisitor(req: Request, res: Response) {
     const authed = req as any;
     const residentId = authed.user?.id;
 
-    const { estateId, visitorName, visitorPhone, purpose, houseId, vehiclePlate, navigationMode } = req.body;
+    const { estateId, visitorName, visitorPhone, purpose, houseId, navigationMode } = req.body;
     if (!estateId || !visitorName) return res.status(400).json({ error: "estateId and visitorName required" });
 
     const accessCode = await generateAccessCode();
@@ -29,10 +27,10 @@ export async function createVisitor(req: Request, res: Response) {
         visitor_name: visitorName,
         visitor_phone: visitorPhone || null,
         purpose: purpose || null,
-        vehicle_plate: vehiclePlate || null,
-        access_code: accessCode,
         house_id: houseId || null,
+        access_code: accessCode,
         navigation_mode: navigationMode || "mapbox",
+        status: "pending",
         expires_at: expiresAt
       }])
       .select()
@@ -43,22 +41,17 @@ export async function createVisitor(req: Request, res: Response) {
     const visitorId = data.id;
     const link = `${VISITOR_LINK_BASE}/${visitorId}`;
 
-    // FIXED: createQrForLink now accepts 2 args
     const qrS3Url = await createQrForLink(link, visitorId);
-
     await supabaseAdmin.from("visitor_access").update({ qr_s3_url: qrS3Url }).eq("id", visitorId);
 
-    try {
-      await sendVisitorLinkNotification({
-        residentId,
-        phone: visitorPhone,
-        link,
-        code: accessCode,
-        visitorName
-      });
-    } catch (err) {
-      console.warn("notify failed:", err);
-    }
+    // --- Notify resident that a new visitor pass is created ---
+    const payload: NotificationPayload = {
+      type: "visitor",
+      entityId: visitorId,
+      message: `New visitor "${visitorName}" created for your estate`,
+      data: { link, accessCode, visitorName }
+    };
+    await notifyUser(residentId, payload);
 
     return res.json({
       id: visitorId,
@@ -71,91 +64,6 @@ export async function createVisitor(req: Request, res: Response) {
 
   } catch (err: any) {
     console.error("createVisitor error", err);
-    return res.status(500).json({ error: err.message || "Internal error" });
-  }
-}
-
-export async function getVisitorInfo(req: Request, res: Response) {
-  try {
-    const id = req.params.id;
-    if (!id) return res.status(400).json({ error: "id required" });
-
-    const { data, error } = await supabaseAdmin
-      .from("visitor_access")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (error || !data) return res.status(404).json({ error: "Visitor not found" });
-
-    if (data.status === "approved") {
-      const { data: mapMeta } = await supabaseAdmin
-        .from("estate_maps")
-        .select("*")
-        .eq("estate_id", data.estate_id)
-        .limit(1)
-        .single();
-
-      return res.json({
-        status: "approved",
-        visitor: data,
-        map: mapMeta || null,
-      });
-    }
-
-    return res.json({
-      status: data.status,
-      visitor: {
-        id: data.id,
-        visitor_name: data.visitor_name,
-        expires_at: data.expires_at,
-      },
-      rules: [
-        "Visitors must not loiter",
-        "Follow estate rules",
-        "Have ID ready for guard check"
-      ]
-    });
-
-  } catch (err: any) {
-    console.error("getVisitorInfo error", err);
-    return res.status(500).json({ error: err.message || "Internal error" });
-  }
-}
-
-export async function verifyVisitor(req: Request, res: Response) {
-  try {
-    const { type, value } = req.body;
-    if (!type || !value) return res.status(400).json({ error: "type and value required" });
-
-    if (type === "code") {
-      const { data, error } = await supabaseAdmin
-        .from("visitor_access")
-        .select("*")
-        .eq("access_code", value)
-        .in("status", ["pending", "approved"])
-        .single();
-
-      if (error || !data) return res.status(404).json({ error: "Code not found or expired" });
-      return res.json({ matched: true, visitor: data });
-    }
-
-    if (type === "qr") {
-      const visitorId = value.includes("/") ? value.split("/").pop() : value;
-      const { data, error } = await supabaseAdmin
-        .from("visitor_access")
-        .select("*")
-        .eq("id", visitorId)
-        .single();
-
-      if (error || !data) return res.status(404).json({ error: "QR not found" });
-      return res.json({ matched: true, visitor: data });
-    }
-
-    return res.status(400).json({ error: "invalid type" });
-
-  } catch (err: any) {
-    console.error("verifyVisitor", err);
     return res.status(500).json({ error: err.message || "Internal error" });
   }
 }
@@ -176,6 +84,15 @@ export async function approveVisitor(req: Request, res: Response) {
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    // --- Notify resident + guard ---
+    const payload: NotificationPayload = {
+      type: "visitor",
+      entityId: id,
+      message: `Visitor "${data.visitor_name}" approved.`,
+      data: { visitorId: id, visitorName: data.visitor_name }
+    };
+    await notifyUser(data.resident_id, payload);
 
     return res.json({ ok: true, visitor: data });
 
@@ -212,6 +129,15 @@ export async function markEntry(req: Request, res: Response) {
 
     await supabaseAdmin.from("visitor_access").update({ status: "entered" }).eq("id", id);
 
+    // --- Notify resident that visitor has entered ---
+    const payload: NotificationPayload = {
+      type: "visitor",
+      entityId: id,
+      message: `Visitor "${va.visitor_name}" has entered the estate.`,
+      data: { visitorId: id, arrivedAt }
+    };
+    await notifyUser(va.resident_id, payload);
+
     return res.json({ ok: true, analytics: data });
 
   } catch (err: any) {
@@ -246,31 +172,20 @@ export async function markExit(req: Request, res: Response) {
 
     await supabaseAdmin.from("visitor_access").update({ status: "exited" }).eq("id", id);
 
+    // --- Notify resident that visitor exited ---
+    const { data: va } = await supabaseAdmin.from("visitor_access").select("*").eq("id", id).single();
+    const payload: NotificationPayload = {
+      type: "visitor",
+      entityId: id,
+      message: `Visitor "${va.visitor_name}" has exited the estate.`,
+      data: { visitorId: id, exitedAt, durationMinutes }
+    };
+    await notifyUser(va.resident_id, payload);
+
     return res.json({ ok: true, durationMinutes });
 
   } catch (err: any) {
     console.error("markExit", err);
-    return res.status(500).json({ error: err.message });
-  }
-}
-
-export async function getAnalyticsForEstate(req: Request, res: Response) {
-  try {
-    const estateId = req.params.estateId;
-
-    const { data, error } = await supabaseAdmin
-      .from("visitor_analytics")
-      .select("*")
-      .eq("estate_id", estateId)
-      .order("created_at", { ascending: false })
-      .limit(100);
-
-    if (error) return res.status(500).json({ error: error.message });
-
-    return res.json(data);
-
-  } catch (err: any) {
-    console.error("getAnalyticsForEstate", err);
     return res.status(500).json({ error: err.message });
   }
 }
