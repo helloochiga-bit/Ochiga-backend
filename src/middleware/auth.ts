@@ -6,9 +6,13 @@ if (!APP_JWT_SECRET) {
   console.warn("⚠️ APP_JWT_SECRET is missing in .env");
 }
 
+/* ---------------------------------------------------------
+ * TYPES
+ * --------------------------------------------------------- */
 export interface AuthUser {
   id: string;
   email?: string;
+  username?: string;     // ✅ Added so TS stops complaining
   role: string;
   estate_id?: string;
   home_id?: string;
@@ -94,7 +98,7 @@ export function attachUser(req: AuthRequest, res: Response, next: NextFunction) 
     const decoded = jwt.verify(token, APP_JWT_SECRET) as AuthUser;
     req.user = decoded;
   } catch {
-    // ignore invalid tokens
+    // ignore invalid/expired tokens
   }
 
   next();
