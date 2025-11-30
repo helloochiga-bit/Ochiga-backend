@@ -23,7 +23,7 @@ export async function createPost(req: AuthRequest, res: Response) {
     // Notify estate residents
     await NotificationService.sendToEstate(estateId, {
       title: "New Community Post",
-      message: `${req.user!.full_name} posted: ${title}`,
+      message: `${req.user!.username} posted: ${title}`,
       type: "community",
       payload: { postId: data.id },
     });
@@ -142,7 +142,7 @@ export async function createComment(req: AuthRequest, res: Response) {
     if (post && post.user_id !== userId) {
       await NotificationService.sendToUser(post.user_id, {
         title: "New Comment",
-        message: `${req.user!.full_name} commented on your post`,
+        message: `${req.user!.username} commented on your post`,
         type: "community",
         payload: { postId, commentId: data.id },
       });
