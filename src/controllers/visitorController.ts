@@ -8,13 +8,17 @@ import { notifyUser, NotificationPayload } from "../services/notificationService
 const DEFAULT_EXPIRES_HOURS = Number(process.env.VISITOR_DEFAULT_EXPIRES_HOURS || 12);
 const VISITOR_LINK_BASE = process.env.VISITOR_LINK_BASE || "";
 
+/* ---------------------------------------------------------
+ * CREATE VISITOR
+ * --------------------------------------------------------- */
 export async function createVisitor(req: Request, res: Response) {
   try {
     const authed = req as any;
     const residentId = authed.user?.id;
 
     const { estateId, visitorName, visitorPhone, purpose, houseId, navigationMode } = req.body;
-    if (!estateId || !visitorName) return res.status(400).json({ error: "estateId and visitorName required" });
+    if (!estateId || !visitorName)
+      return res.status(400).json({ error: "estateId and visitorName required" });
 
     const accessCode = await generateAccessCode();
     const expiresAt = new Date(Date.now() + DEFAULT_EXPIRES_HOURS * 3600 * 1000).toISOString();
@@ -44,7 +48,6 @@ export async function createVisitor(req: Request, res: Response) {
     const qrS3Url = await createQrForLink(link, visitorId);
     await supabaseAdmin.from("visitor_access").update({ qr_s3_url: qrS3Url }).eq("id", visitorId);
 
-    // --- Notify resident that a new visitor pass is created ---
     const payload: NotificationPayload = {
       type: "visitor",
       entityId: visitorId,
@@ -68,6 +71,9 @@ export async function createVisitor(req: Request, res: Response) {
   }
 }
 
+/* ---------------------------------------------------------
+ * APPROVE VISITOR
+ * --------------------------------------------------------- */
 export async function approveVisitor(req: Request, res: Response) {
   try {
     const id = req.params.id;
@@ -85,7 +91,6 @@ export async function approveVisitor(req: Request, res: Response) {
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // --- Notify resident + guard ---
     const payload: NotificationPayload = {
       type: "visitor",
       entityId: id,
@@ -102,6 +107,9 @@ export async function approveVisitor(req: Request, res: Response) {
   }
 }
 
+/* ---------------------------------------------------------
+ * MARK ENTRY
+ * --------------------------------------------------------- */
 export async function markEntry(req: Request, res: Response) {
   try {
     const id = req.params.id;
@@ -129,7 +137,6 @@ export async function markEntry(req: Request, res: Response) {
 
     await supabaseAdmin.from("visitor_access").update({ status: "entered" }).eq("id", id);
 
-    // --- Notify resident that visitor has entered ---
     const payload: NotificationPayload = {
       type: "visitor",
       entityId: id,
@@ -146,6 +153,9 @@ export async function markEntry(req: Request, res: Response) {
   }
 }
 
+/* ---------------------------------------------------------
+ * MARK EXIT
+ * --------------------------------------------------------- */
 export async function markExit(req: Request, res: Response) {
   try {
     const id = req.params.id;
@@ -172,8 +182,12 @@ export async function markExit(req: Request, res: Response) {
 
     await supabaseAdmin.from("visitor_access").update({ status: "exited" }).eq("id", id);
 
-    // --- Notify resident that visitor exited ---
-    const { data: va } = await supabaseAdmin.from("visitor_access").select("*").eq("id", id).single();
+    const { data: va } = await supabaseAdmin
+      .from("visitor_access")
+      .select("*")
+      .eq("id", id)
+      .single();
+
     const payload: NotificationPayload = {
       type: "visitor",
       entityId: id,
@@ -186,6 +200,48 @@ export async function markExit(req: Request, res: Response) {
 
   } catch (err: any) {
     console.error("markExit", err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+/* ---------------------------------------------------------
+ * GET ANALYTICS FOR ESTATE
+ * --------------------------------------------------------- */
+export async function getAnalyticsForEstate(req: Request, res: Response) {
+  try {
+    const estateId = req.params.estateId;
+    if (!estateId) return res.status(400).json({ error: "estateId required" });
+
+    // Get all visitor analytics for the estate
+    const { data: analytics, error } = await supabaseAdmin
+      .from("visitor_analytics")
+      .select("*")
+      .eq("estate_id", estateId);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Compute summaries
+    const totalVisitors = analytics.length;
+
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
+    const todayVisitors = analytics.filter(a =>
+      a.arrived_at?.slice(0, 10) === todayStr
+    ).length;
+
+    const exitedVisitors = analytics.filter(a => a.exited_at != null).length;
+
+    return res.json({
+      estateId,
+      totalVisitors,
+      todayVisitors,
+      exitedVisitors,
+      records: analytics
+    });
+
+  } catch (err: any) {
+    console.error("getAnalyticsForEstate", err);
     return res.status(500).json({ error: err.message });
   }
 }
