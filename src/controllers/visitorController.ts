@@ -1,4 +1,5 @@
 // src/controllers/visitorController.ts
+
 import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase/supabaseClient";
 import { generateAccessCode } from "../services/codeService";
@@ -17,6 +18,7 @@ export async function createVisitor(req: Request, res: Response) {
     const residentId = authed.user?.id;
 
     const { estateId, visitorName, visitorPhone, purpose, houseId, navigationMode } = req.body;
+
     if (!estateId || !visitorName)
       return res.status(400).json({ error: "estateId and visitorName required" });
 
@@ -45,15 +47,18 @@ export async function createVisitor(req: Request, res: Response) {
     const visitorId = data.id;
     const link = `${VISITOR_LINK_BASE}/${visitorId}`;
 
+    // QR
     const qrS3Url = await createQrForLink(link, visitorId);
     await supabaseAdmin.from("visitor_access").update({ qr_s3_url: qrS3Url }).eq("id", visitorId);
 
+    // Notify user
     const payload: NotificationPayload = {
       type: "visitor",
       entityId: visitorId,
-      message: `New visitor "${visitorName}" created for your estate`,
+      message: `New visitor "${visitorName}" created.`,
       data: { link, accessCode, visitorName }
     };
+
     await notifyUser(residentId, payload);
 
     return res.json({
@@ -67,7 +72,35 @@ export async function createVisitor(req: Request, res: Response) {
 
   } catch (err: any) {
     console.error("createVisitor error", err);
-    return res.status(500).json({ error: err.message || "Internal error" });
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+/* ---------------------------------------------------------
+ * VERIFY VISITOR (Fix for router.post('/verify'))
+ * --------------------------------------------------------- */
+export async function verifyVisitor(req: Request, res: Response) {
+  try {
+    const { code, estateId } = req.body;
+
+    if (!code || !estateId)
+      return res.status(400).json({ error: "code and estateId required" });
+
+    const { data, error } = await supabaseAdmin
+      .from("visitor_access")
+      .select("*")
+      .eq("access_code", code)
+      .eq("estate_id", estateId)
+      .single();
+
+    if (error || !data)
+      return res.status(404).json({ error: "Invalid access code or estate" });
+
+    return res.json({ valid: true, visitor: data });
+
+  } catch (err: any) {
+    console.error("verifyVisitor", err);
+    return res.status(500).json({ error: err.message });
   }
 }
 
@@ -95,8 +128,9 @@ export async function approveVisitor(req: Request, res: Response) {
       type: "visitor",
       entityId: id,
       message: `Visitor "${data.visitor_name}" approved.`,
-      data: { visitorId: id, visitorName: data.visitor_name }
+      data: { visitorId: id }
     };
+
     await notifyUser(data.resident_id, payload);
 
     return res.json({ ok: true, visitor: data });
@@ -140,9 +174,10 @@ export async function markEntry(req: Request, res: Response) {
     const payload: NotificationPayload = {
       type: "visitor",
       entityId: id,
-      message: `Visitor "${va.visitor_name}" has entered the estate.`,
+      message: `Visitor "${va.visitor_name}" entered estate.`,
       data: { visitorId: id, arrivedAt }
     };
+
     await notifyUser(va.resident_id, payload);
 
     return res.json({ ok: true, analytics: data });
@@ -191,9 +226,10 @@ export async function markExit(req: Request, res: Response) {
     const payload: NotificationPayload = {
       type: "visitor",
       entityId: id,
-      message: `Visitor "${va.visitor_name}" has exited the estate.`,
+      message: `Visitor "${va.visitor_name}" exited estate.`,
       data: { visitorId: id, exitedAt, durationMinutes }
     };
+
     await notifyUser(va.resident_id, payload);
 
     return res.json({ ok: true, durationMinutes });
@@ -212,7 +248,6 @@ export async function getAnalyticsForEstate(req: Request, res: Response) {
     const estateId = req.params.estateId;
     if (!estateId) return res.status(400).json({ error: "estateId required" });
 
-    // Get all visitor analytics for the estate
     const { data: analytics, error } = await supabaseAdmin
       .from("visitor_analytics")
       .select("*")
@@ -220,7 +255,6 @@ export async function getAnalyticsForEstate(req: Request, res: Response) {
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Compute summaries
     const totalVisitors = analytics.length;
 
     const today = new Date();
