@@ -230,17 +230,24 @@ export async function reactToPost(req: AuthRequest, res: Response) {
   const userId = req.user!.id;
   const { type } = req.body;
 
-  const { data, error } = await supabaseAdmin
-    .from("community_reactions")
-    .upsert(
-      { post_id: postId, user_id: userId, type },
-      { onConflict: ["post_id", "user_id"] }
-    )
-    .select()
-    .single();
+  if (!type || typeof type !== "string")
+    return res.status(400).json({ error: "Reaction type is required" });
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("community_reactions")
+      .upsert(
+        { post_id: postId, user_id: userId, type },
+        { onConflict: ["post_id", "user_id"] }
+      )
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 }
 
 export async function reactToComment(req: AuthRequest, res: Response) {
@@ -248,17 +255,24 @@ export async function reactToComment(req: AuthRequest, res: Response) {
   const userId = req.user!.id;
   const { type } = req.body;
 
-  const { data, error } = await supabaseAdmin
-    .from("community_reactions")
-    .upsert(
-      { comment_id: commentId, user_id: userId, type },
-      { onConflict: ["comment_id", "user_id"] }
-    )
-    .select()
-    .single();
+  if (!type || typeof type !== "string")
+    return res.status(400).json({ error: "Reaction type is required" });
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("community_reactions")
+      .upsert(
+        { comment_id: commentId, user_id: userId, type },
+        { onConflict: ["comment_id", "user_id"] }
+      )
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 }
 
 // =============================
