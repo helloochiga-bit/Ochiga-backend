@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { supabaseAdmin as supabase } from "../supabase/client";
+import { supabaseAdmin as supabase } from "../supabase/supabaseClient";
 
 // Type-safe home payload
 export interface HomePayload {
@@ -7,27 +7,33 @@ export interface HomePayload {
   address?: string;
   latitude?: number;
   longitude?: number;
-  estateId?: string;
-  ownerId?: string;
-  [key: string]: any; // allow extra fields
+  estate_id?: string;
+  owner_id?: string;
+  [key: string]: any;
 }
 
 // Create Home
 export const createHome = async (req: Request, res: Response) => {
   try {
-    const form: HomePayload = req.body;
+    const { name, estate_id, owner_id, latitude, longitude } = req.body;
 
-    if (!form || !form.name) {
-      return res.status(400).json({
-        message: "Home name is required",
-        received: form,
-      });
+    if (!name || !estate_id) {
+      return res.status(400).json({ message: "name and estate_id are required" });
     }
+
+    const payload: HomePayload = {
+      name,
+      estate_id,
+      owner_id: owner_id || null,
+      latitude: latitude || null,
+      longitude: longitude || null,
+    };
 
     const { data, error } = await supabase
       .from("homes")
-      .insert([form])
-      .select();
+      .insert([payload])
+      .select()
+      .single();
 
     if (error) {
       return res.status(400).json({
@@ -38,12 +44,12 @@ export const createHome = async (req: Request, res: Response) => {
 
     return res.status(201).json({
       message: "Home created successfully",
-      data: data?.[0],
+      data,
     });
   } catch (err: any) {
     return res.status(500).json({
       message: "Server error",
-      error: err?.message ?? "Unknown error",
+      error: err.message,
     });
   }
 };
@@ -56,21 +62,16 @@ export const getHomesByEstate = async (req: Request, res: Response) => {
     const { data, error } = await supabase
       .from("homes")
       .select("*")
-      .eq("estateId", estateId);
+      .eq("estate_id", estateId);
 
-    if (error) {
-      return res.status(400).json({ message: error.message });
-    }
+    if (error) return res.status(400).json({ message: error.message });
 
     return res.status(200).json({
       message: "Homes fetched successfully",
       data,
     });
   } catch (err: any) {
-    return res.status(500).json({
-      message: "Server error",
-      error: err.message,
-    });
+    return res.status(500).json({ error: err.message });
   }
 };
 
@@ -85,19 +86,14 @@ export const getHome = async (req: Request, res: Response) => {
       .eq("id", homeId)
       .single();
 
-    if (error) {
-      return res.status(404).json({ message: "Home not found" });
-    }
+    if (error) return res.status(404).json({ message: "Home not found" });
 
     return res.status(200).json({
       message: "Home retrieved successfully",
       data,
     });
   } catch (err: any) {
-    return res.status(500).json({
-      message: "Server error",
-      error: err.message,
-    });
+    return res.status(500).json({ error: err.message });
   }
 };
 
@@ -114,22 +110,15 @@ export const updateHome = async (req: Request, res: Response) => {
       .select()
       .single();
 
-    if (error) {
-      return res.status(400).json({
-        message: "Failed to update home",
-        error: error.message,
-      });
-    }
+    if (error)
+      return res.status(400).json({ message: "Failed to update home", error: error.message });
 
     return res.status(200).json({
       message: "Home updated successfully",
       data,
     });
   } catch (err: any) {
-    return res.status(500).json({
-      message: "Server error",
-      error: err.message,
-    });
+    return res.status(500).json({ error: err.message });
   }
 };
 
@@ -138,25 +127,13 @@ export const deleteHome = async (req: Request, res: Response) => {
   try {
     const { homeId } = req.params;
 
-    const { error } = await supabase
-      .from("homes")
-      .delete()
-      .eq("id", homeId);
+    const { error } = await supabase.from("homes").delete().eq("id", homeId);
 
-    if (error) {
-      return res.status(400).json({
-        message: "Failed to delete home",
-        error: error.message,
-      });
-    }
+    if (error)
+      return res.status(400).json({ message: "Failed to delete home", error: error.message });
 
-    return res.status(200).json({
-      message: "Home deleted successfully",
-    });
+    return res.status(200).json({ message: "Home deleted successfully" });
   } catch (err: any) {
-    return res.status(500).json({
-      message: "Server error",
-      error: err.message,
-    });
+    return res.status(500).json({ error: err.message });
   }
 };
