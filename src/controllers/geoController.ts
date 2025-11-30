@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase/client";
 import { io } from "../server";
 import { calculateDistance } from "../utils/geoMath";
-import { notifyUser, NotificationPayload } from "../services/notificationService";
+import { notifyUser, NotificationPayload } from "../services/NotificationService";
 
 export async function updateDeviceLocation(req: Request, res: Response) {
   try {
