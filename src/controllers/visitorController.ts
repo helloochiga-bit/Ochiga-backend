@@ -4,7 +4,7 @@ import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase/supabaseClient";
 import { generateAccessCode } from "../services/codeService";
 import { createQrForLink } from "../services/qrService";
-import { notifyUser, NotificationPayload } from "../services/notificationService";
+import { notifyUser, NotificationPayload } from "../services/NotificationService";
 
 const DEFAULT_EXPIRES_HOURS = Number(process.env.VISITOR_DEFAULT_EXPIRES_HOURS || 12);
 const VISITOR_LINK_BASE = process.env.VISITOR_LINK_BASE || "";
