@@ -42,18 +42,17 @@ export async function createVisitor(req: Request, res: Response) {
 
     const visitorId = data.id;
     const link = `${VISITOR_LINK_BASE}/${visitorId}`;
-
     const qrS3Url = await createQrForLink(link, visitorId);
     await supabaseAdmin.from("visitor_access").update({ qr_s3_url: qrS3Url }).eq("id", visitorId);
 
     // Notify resident
     const payload: NotificationPayload = {
+      title: "New Visitor Created",
       type: "visitor",
       entityId: visitorId,
       message: `New visitor "${visitorName}" created.`,
       payload: { link, accessCode, visitorName }
     };
-
     await notifyUser(residentId, payload);
 
     return res.json({
@@ -111,12 +110,12 @@ export async function approveVisitor(req: Request, res: Response) {
     if (error) return res.status(500).json({ error: error.message });
 
     const payload: NotificationPayload = {
+      title: "Visitor Approved",
       type: "visitor",
       entityId: id,
       message: `Visitor "${data.visitor_name}" approved.`,
       payload: { visitorId: id }
     };
-
     await notifyUser(data.resident_id, payload);
 
     return res.json({ ok: true, visitor: data });
@@ -155,12 +154,12 @@ export async function markEntry(req: Request, res: Response) {
     await supabaseAdmin.from("visitor_access").update({ status: "entered" }).eq("id", id);
 
     const payload: NotificationPayload = {
+      title: "Visitor Entered",
       type: "visitor",
       entityId: id,
       message: `Visitor "${va.visitor_name}" entered estate.`,
       payload: { visitorId: id, arrivedAt }
     };
-
     await notifyUser(va.resident_id, payload);
 
     return res.json({ ok: true, analytics: data });
@@ -204,12 +203,12 @@ export async function markExit(req: Request, res: Response) {
       .single();
 
     const payload: NotificationPayload = {
+      title: "Visitor Exited",
       type: "visitor",
       entityId: id,
       message: `Visitor "${va.visitor_name}" exited estate.`,
       payload: { visitorId: id, exitedAt, durationMinutes }
     };
-
     await notifyUser(va.resident_id, payload);
 
     return res.json({ ok: true, durationMinutes });
