@@ -235,7 +235,7 @@ export async function reactToPost(req: AuthRequest, res: Response) {
     const { data, error } = await supabaseAdmin
       .from("community_reactions")
       .upsert(
-        [{ post_id: postId, user_id: userId, type }], // ✅ array with exact keys
+        [{ post_id: postId, user_id: userId, type }],
         { onConflict: ["post_id", "user_id"] }
       )
       .select()
@@ -260,7 +260,7 @@ export async function reactToComment(req: AuthRequest, res: Response) {
     const { data, error } = await supabaseAdmin
       .from("community_reactions")
       .upsert(
-        [{ comment_id: commentId, user_id: userId, type }], // ✅ correct keys and array
+        [{ comment_id: commentId, user_id: userId, type }],
         { onConflict: ["comment_id", "user_id"] }
       )
       .select()
@@ -308,3 +308,18 @@ export async function votePoll(req: AuthRequest, res: Response) {
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 }
+
+export default {
+  createPost,
+  getPostsForEstate,
+  getPostById,
+  updatePost,
+  deletePost,
+  createComment,
+  getCommentsForPost,
+  updateComment,
+  deleteComment,
+  reactToPost,
+  reactToComment,
+  votePoll,
+};
