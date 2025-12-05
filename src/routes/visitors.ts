@@ -2,7 +2,7 @@
 
 import { Router } from "express";
 import * as VisitorCtrl from "../controllers/visitorController";
-import { requireAuth } from "../middleware/requireAuth";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
