@@ -125,7 +125,7 @@ export async function createComment(req: AuthRequest, res: Response) {
   try {
     const { data, error } = await supabaseAdmin
       .from("community_comments")
-      .insert([{ post_id: String(postId), content, parent_comment_id: parent_comment_id ? String(parent_comment_id) : null, user_id: String(userId) }])
+      .insert([{ post_id: postId, content, parent_comment_id: parent_comment_id || null, user_id: userId }])
       .select()
       .single();
 
@@ -142,7 +142,7 @@ export async function createComment(req: AuthRequest, res: Response) {
         title: "New Comment",
         message: `${req.user!.username} commented on your post`,
         type: "community",
-        payload: { postId: String(postId), commentId: data.id },
+        payload: { postId, commentId: data.id },
       });
     }
 
@@ -158,7 +158,7 @@ export async function getCommentsForPost(req: AuthRequest, res: Response) {
   const { data, error } = await supabaseAdmin
     .from("community_comments")
     .select("*")
-    .eq("post_id", String(postId))
+    .eq("post_id", postId)
     .order("created_at", { ascending: true });
 
   if (error) return res.status(500).json({ error: error.message });
@@ -173,7 +173,7 @@ export async function updateComment(req: AuthRequest, res: Response) {
   const { data: comment, error: fetchError } = await supabaseAdmin
     .from("community_comments")
     .select("*")
-    .eq("id", String(commentId))
+    .eq("id", commentId)
     .single();
 
   if (fetchError || !comment)
@@ -185,7 +185,7 @@ export async function updateComment(req: AuthRequest, res: Response) {
   const { data, error } = await supabaseAdmin
     .from("community_comments")
     .update({ content, updated_at: new Date().toISOString() })
-    .eq("id", String(commentId))
+    .eq("id", commentId)
     .select()
     .single();
 
@@ -200,7 +200,7 @@ export async function deleteComment(req: AuthRequest, res: Response) {
   const { data: comment, error: fetchError } = await supabaseAdmin
     .from("community_comments")
     .select("*")
-    .eq("id", String(commentId))
+    .eq("id", commentId)
     .single();
 
   if (fetchError || !comment)
@@ -212,7 +212,7 @@ export async function deleteComment(req: AuthRequest, res: Response) {
   const { data, error } = await supabaseAdmin
     .from("community_comments")
     .delete()
-    .eq("id", String(commentId))
+    .eq("id", commentId)
     .select()
     .single();
 
@@ -221,30 +221,31 @@ export async function deleteComment(req: AuthRequest, res: Response) {
 }
 
 // =============================
-// REACTIONS
+// REACTIONS (FIXED)
 // =============================
 export async function reactToPost(req: AuthRequest, res: Response) {
   const postId = req.params.postId;
   const userId = req.user!.id;
   const { type } = req.body;
 
-  if (!type || typeof type !== "string")
-    return res.status(400).json({ error: "Reaction type is required" });
+  if (!type) return res.status(400).json({ error: "Reaction type required" });
 
-  try {
-    const reaction = { post_id: String(postId), user_id: String(userId), type: String(type) };
+  const reaction = {
+    post_id: String(postId),
+    user_id: String(userId),
+    type: String(type),
+  } as { post_id: string; user_id: string; type: string };
 
-    const { data, error } = await supabaseAdmin
-      .from("community_reactions")
-      .upsert([reaction], { onConflict: ["post_id", "user_id"] })
-      .select()
-      .single();
+  const { data, error } = await supabaseAdmin
+    .from("community_reactions")
+    .upsert([reaction], {
+      onConflict: "post_id,user_id",
+    })
+    .select()
+    .single();
 
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 }
 
 export async function reactToComment(req: AuthRequest, res: Response) {
@@ -252,23 +253,24 @@ export async function reactToComment(req: AuthRequest, res: Response) {
   const userId = req.user!.id;
   const { type } = req.body;
 
-  if (!type || typeof type !== "string")
-    return res.status(400).json({ error: "Reaction type is required" });
+  if (!type) return res.status(400).json({ error: "Reaction type required" });
 
-  try {
-    const reaction = { comment_id: String(commentId), user_id: String(userId), type: String(type) };
+  const reaction = {
+    comment_id: String(commentId),
+    user_id: String(userId),
+    type: String(type),
+  } as { comment_id: string; user_id: string; type: string };
 
-    const { data, error } = await supabaseAdmin
-      .from("community_reactions")
-      .upsert([reaction], { onConflict: ["comment_id", "user_id"] })
-      .select()
-      .single();
+  const { data, error } = await supabaseAdmin
+    .from("community_reactions")
+    .upsert([reaction], {
+      onConflict: "comment_id,user_id",
+    })
+    .select()
+    .single();
 
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 }
 
 // =============================
@@ -282,24 +284,26 @@ export async function votePoll(req: AuthRequest, res: Response) {
   const { data: post, error: fetchError } = await supabaseAdmin
     .from("community_posts")
     .select("*")
-    .eq("id", String(postId))
+    .eq("id", postId)
     .single();
 
   if (fetchError || !post) return res.status(404).json({ error: "Post not found" });
 
-  if (!post.poll || !post.poll.options) return res.status(400).json({ error: "No poll found" });
+  if (!post.poll || !post.poll.options)
+    return res.status(400).json({ error: "No poll found" });
 
   const poll = post.poll;
   const optionIndex = poll.options.findIndex((o: any) => o.option === option);
 
-  if (optionIndex === -1) return res.status(400).json({ error: "Invalid option" });
+  if (optionIndex === -1)
+    return res.status(400).json({ error: "Invalid option" });
 
   poll.options[optionIndex].votes += 1;
 
   const { data, error } = await supabaseAdmin
     .from("community_posts")
     .update({ poll, updated_at: new Date().toISOString() })
-    .eq("id", String(postId))
+    .eq("id", postId)
     .select()
     .single();
 
