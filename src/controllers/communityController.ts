@@ -24,7 +24,7 @@ export async function createPost(req: AuthRequest, res: Response) {
       title: "New Community Post",
       message: `${req.user!.username} posted: ${title}`,
       type: "community",
-      payload: { postId: data.id },
+      payload: { post_id: data.id },
     });
 
     res.json(data);
@@ -142,7 +142,7 @@ export async function createComment(req: AuthRequest, res: Response) {
         title: "New Comment",
         message: `${req.user!.username} commented on your post`,
         type: "community",
-        payload: { postId, commentId: data.id },
+        payload: { post_id: postId, comment_id: data.id },
       });
     }
 
@@ -232,12 +232,10 @@ export async function reactToPost(req: AuthRequest, res: Response) {
     return res.status(400).json({ error: "Reaction type is required" });
 
   try {
+    const reaction = { post_id: postId, user_id: userId, type };
     const { data, error } = await supabaseAdmin
       .from("community_reactions")
-      .upsert(
-        [{ post_id: postId, user_id: userId, type }],
-        { onConflict: ["post_id", "user_id"] }
-      )
+      .upsert([reaction], { onConflict: ["post_id", "user_id"] })
       .select()
       .single();
 
@@ -257,12 +255,10 @@ export async function reactToComment(req: AuthRequest, res: Response) {
     return res.status(400).json({ error: "Reaction type is required" });
 
   try {
+    const reaction = { comment_id: commentId, user_id: userId, type };
     const { data, error } = await supabaseAdmin
       .from("community_reactions")
-      .upsert(
-        [{ comment_id: commentId, user_id: userId, type }],
-        { onConflict: ["comment_id", "user_id"] }
-      )
+      .upsert([reaction], { onConflict: ["comment_id", "user_id"] })
       .select()
       .single();
 
@@ -308,18 +304,3 @@ export async function votePoll(req: AuthRequest, res: Response) {
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 }
-
-export default {
-  createPost,
-  getPostsForEstate,
-  getPostById,
-  updatePost,
-  deletePost,
-  createComment,
-  getCommentsForPost,
-  updateComment,
-  deleteComment,
-  reactToPost,
-  reactToComment,
-  votePoll,
-};
