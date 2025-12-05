@@ -41,10 +41,11 @@ export async function updateDeviceLocation(req: Request, res: Response) {
     // Notify owner
     if (data?.owner_id) {
       const payload: NotificationPayload = {
+        title: "Device Location Updated",  // ✅ Added title
         type: "device",
         entityId: deviceId,
-        message: `Device ${data.name} location updated.`,
-        data: { lat, lng, installationPoint },
+        message: `Device "${data.name}" location updated.`,
+        payload: { lat, lng, installationPoint }, // ✅ Use `payload` instead of `data`
       };
       await notifyUser(data.owner_id, payload);
     }
