@@ -47,7 +47,6 @@ export class NotificationService {
     if (error || !users) return { error };
 
     const insertData = users.map((u) => ({ user_id: u.id, ...notification }));
-
     const { data, error: insertError } = await supabaseAdmin
       .from("notifications")
       .insert(insertData)
@@ -67,7 +66,6 @@ export class NotificationService {
     if (error || !users) return { error };
 
     const insertData = users.map((u) => ({ user_id: u.id, ...notification }));
-
     const { data, error: insertError } = await supabaseAdmin
       .from("notifications")
       .insert(insertData)
@@ -88,7 +86,6 @@ export class NotificationService {
     if (error || !users) return { error };
 
     const insertData = users.map((u) => ({ user_id: u.id, ...notification }));
-
     const { data, error: insertError } = await supabaseAdmin
       .from("notifications")
       .insert(insertData)
