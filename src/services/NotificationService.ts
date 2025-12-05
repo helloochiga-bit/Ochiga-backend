@@ -2,6 +2,7 @@
 import { supabaseAdmin } from "../supabase/supabaseClient";
 import { io } from "../server";
 
+/** Types of notifications */
 export type NotificationType =
   | "visitor"
   | "maintenance"
@@ -13,13 +14,16 @@ export type NotificationType =
   | "wallet"
   | "system";
 
+/** Notification payload with optional entityId */
 export interface NotificationPayload {
   title: string;
   message: string;
   type: NotificationType;
-  payload?: any; // additional data
+  payload?: any;       // additional data
+  entityId?: string;   // optional ID of the related entity (device, visitor, etc.)
 }
 
+/** Notification service class */
 export class NotificationService {
   /** Send notification to a single user */
   static async sendToUser(userId: string, notification: NotificationPayload) {
@@ -106,3 +110,8 @@ export class NotificationService {
     return { data, error };
   }
 }
+
+/** Helper function for simpler usage in controllers */
+export const notifyUser = async (userId: string, payload: NotificationPayload) => {
+  return NotificationService.sendToUser(userId, payload);
+};
