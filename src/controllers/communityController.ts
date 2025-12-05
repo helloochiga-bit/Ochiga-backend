@@ -14,7 +14,7 @@ export async function createPost(req: AuthRequest, res: Response) {
   try {
     const { data, error } = await supabaseAdmin
       .from("community_posts")
-      .insert([{ title, content, media, poll, estate_id: estateId, user_id: userId }])
+      .insert([{ title, content, media, poll, estate_id: String(estateId), user_id: String(userId) }])
       .select()
       .single();
 
@@ -24,7 +24,7 @@ export async function createPost(req: AuthRequest, res: Response) {
       title: "New Community Post",
       message: `${req.user!.username} posted: ${title}`,
       type: "community",
-      payload: { post_id: data.id },
+      payload: { postId: data.id },
     });
 
     res.json(data);
@@ -123,9 +123,16 @@ export async function createComment(req: AuthRequest, res: Response) {
   if (!content) return res.status(400).json({ error: "Content is required" });
 
   try {
+    const commentInsert = {
+      post_id: String(postId),
+      content,
+      parent_comment_id: parent_comment_id ? String(parent_comment_id) : null,
+      user_id: String(userId),
+    };
+
     const { data, error } = await supabaseAdmin
       .from("community_comments")
-      .insert([{ post_id: postId, content, parent_comment_id: parent_comment_id || null, user_id: userId }])
+      .insert([commentInsert])
       .select()
       .single();
 
@@ -142,7 +149,7 @@ export async function createComment(req: AuthRequest, res: Response) {
         title: "New Comment",
         message: `${req.user!.username} commented on your post`,
         type: "community",
-        payload: { post_id: postId, comment_id: data.id },
+        payload: { postId, commentId: data.id },
       });
     }
 
@@ -231,8 +238,10 @@ export async function reactToPost(req: AuthRequest, res: Response) {
   if (!type || typeof type !== "string")
     return res.status(400).json({ error: "Reaction type is required" });
 
+  if (!postId || !userId) return res.status(400).json({ error: "Invalid post or user" });
+
   try {
-    const reaction = { post_id: postId, user_id: userId, type };
+    const reaction = { post_id: String(postId), user_id: String(userId), type: String(type) };
     const { data, error } = await supabaseAdmin
       .from("community_reactions")
       .upsert([reaction], { onConflict: ["post_id", "user_id"] })
@@ -254,8 +263,10 @@ export async function reactToComment(req: AuthRequest, res: Response) {
   if (!type || typeof type !== "string")
     return res.status(400).json({ error: "Reaction type is required" });
 
+  if (!commentId || !userId) return res.status(400).json({ error: "Invalid comment or user" });
+
   try {
-    const reaction = { comment_id: commentId, user_id: userId, type };
+    const reaction = { comment_id: String(commentId), user_id: String(userId), type: String(type) };
     const { data, error } = await supabaseAdmin
       .from("community_reactions")
       .upsert([reaction], { onConflict: ["comment_id", "user_id"] })
@@ -284,7 +295,6 @@ export async function votePoll(req: AuthRequest, res: Response) {
     .single();
 
   if (fetchError || !post) return res.status(404).json({ error: "Post not found" });
-
   if (!post.poll || !post.poll.options) return res.status(400).json({ error: "No poll found" });
 
   const poll = post.poll;
