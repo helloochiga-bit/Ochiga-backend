@@ -1,7 +1,7 @@
 // src/controllers/communityController.ts
 import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase/supabaseClient";
-import { NotificationService } from "../services/NotificationService";
+import { NotificationService, NotificationPayload } from "../services/NotificationService";
 import { AuthRequest } from "../middleware/auth";
 
 // =============================
@@ -25,6 +25,7 @@ export async function createPost(req: AuthRequest, res: Response) {
       title: "New Community Post",
       message: `${req.user!.username} posted: ${title}`,
       type: "community",
+      entityId: data.id,
       payload: { postId: data.id },
     });
 
@@ -144,6 +145,7 @@ export async function createComment(req: AuthRequest, res: Response) {
         title: "New Comment",
         message: `${req.user!.username} commented on your post`,
         type: "community",
+        entityId: postId,
         payload: { postId, commentId: data.id },
       });
     }
@@ -290,12 +292,10 @@ export async function votePoll(req: AuthRequest, res: Response) {
     .single();
 
   if (fetchError || !post) return res.status(404).json({ error: "Post not found" });
-
   if (!post.poll || !post.poll.options) return res.status(400).json({ error: "No poll found" });
 
   const poll = post.poll;
   const optionIndex = poll.options.findIndex((o: any) => o.option === option);
-
   if (optionIndex === -1) return res.status(400).json({ error: "Invalid option" });
 
   poll.options[optionIndex].votes += 1;
