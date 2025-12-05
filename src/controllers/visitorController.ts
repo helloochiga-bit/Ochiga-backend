@@ -1,5 +1,3 @@
-// src/controllers/visitorController.ts
-
 import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase/supabaseClient";
 import { generateAccessCode } from "../services/codeService";
@@ -9,9 +7,7 @@ import { notifyUser, NotificationPayload } from "../services/NotificationService
 const DEFAULT_EXPIRES_HOURS = Number(process.env.VISITOR_DEFAULT_EXPIRES_HOURS || 12);
 const VISITOR_LINK_BASE = process.env.VISITOR_LINK_BASE || "";
 
-/* ---------------------------------------------------------
- * CREATE VISITOR
- * --------------------------------------------------------- */
+/* CREATE VISITOR */
 export async function createVisitor(req: Request, res: Response) {
   try {
     const authed = req as any;
@@ -47,7 +43,6 @@ export async function createVisitor(req: Request, res: Response) {
     const visitorId = data.id;
     const link = `${VISITOR_LINK_BASE}/${visitorId}`;
 
-    // QR
     const qrS3Url = await createQrForLink(link, visitorId);
     await supabaseAdmin.from("visitor_access").update({ qr_s3_url: qrS3Url }).eq("id", visitorId);
 
@@ -56,7 +51,7 @@ export async function createVisitor(req: Request, res: Response) {
       type: "visitor",
       entityId: visitorId,
       message: `New visitor "${visitorName}" created.`,
-      data: { link, accessCode, visitorName }
+      payload: { link, accessCode, visitorName }
     };
 
     await notifyUser(residentId, payload);
@@ -76,13 +71,10 @@ export async function createVisitor(req: Request, res: Response) {
   }
 }
 
-/* ---------------------------------------------------------
- * VERIFY VISITOR
- * --------------------------------------------------------- */
+/* VERIFY VISITOR */
 export async function verifyVisitor(req: Request, res: Response) {
   try {
     const { code, estateId } = req.body;
-
     if (!code || !estateId)
       return res.status(400).json({ error: "code and estateId required" });
 
@@ -97,16 +89,13 @@ export async function verifyVisitor(req: Request, res: Response) {
       return res.status(404).json({ error: "Invalid access code or estate" });
 
     return res.json({ valid: true, visitor: data });
-
   } catch (err: any) {
     console.error("verifyVisitor", err);
     return res.status(500).json({ error: err.message });
   }
 }
 
-/* ---------------------------------------------------------
- * APPROVE VISITOR
- * --------------------------------------------------------- */
+/* APPROVE VISITOR */
 export async function approveVisitor(req: Request, res: Response) {
   try {
     const id = req.params.id;
@@ -114,10 +103,7 @@ export async function approveVisitor(req: Request, res: Response) {
 
     const { data, error } = await supabaseAdmin
       .from("visitor_access")
-      .update({
-        status: "approved",
-        verified_at: new Date().toISOString()
-      })
+      .update({ status: "approved", verified_at: new Date().toISOString() })
       .eq("id", id)
       .select()
       .single();
@@ -128,22 +114,19 @@ export async function approveVisitor(req: Request, res: Response) {
       type: "visitor",
       entityId: id,
       message: `Visitor "${data.visitor_name}" approved.`,
-      data: { visitorId: id }
+      payload: { visitorId: id }
     };
 
     await notifyUser(data.resident_id, payload);
 
     return res.json({ ok: true, visitor: data });
-
   } catch (err: any) {
     console.error("approveVisitor", err);
     return res.status(500).json({ error: err.message });
   }
 }
 
-/* ---------------------------------------------------------
- * MARK ENTRY
- * --------------------------------------------------------- */
+/* MARK ENTRY */
 export async function markEntry(req: Request, res: Response) {
   try {
     const id = req.params.id;
@@ -175,22 +158,19 @@ export async function markEntry(req: Request, res: Response) {
       type: "visitor",
       entityId: id,
       message: `Visitor "${va.visitor_name}" entered estate.`,
-      data: { visitorId: id, arrivedAt }
+      payload: { visitorId: id, arrivedAt }
     };
 
     await notifyUser(va.resident_id, payload);
 
     return res.json({ ok: true, analytics: data });
-
   } catch (err: any) {
     console.error("markEntry", err);
     return res.status(500).json({ error: err.message });
   }
 }
 
-/* ---------------------------------------------------------
- * MARK EXIT
- * --------------------------------------------------------- */
+/* MARK EXIT */
 export async function markExit(req: Request, res: Response) {
   try {
     const id = req.params.id;
@@ -227,22 +207,19 @@ export async function markExit(req: Request, res: Response) {
       type: "visitor",
       entityId: id,
       message: `Visitor "${va.visitor_name}" exited estate.`,
-      data: { visitorId: id, exitedAt, durationMinutes }
+      payload: { visitorId: id, exitedAt, durationMinutes }
     };
 
     await notifyUser(va.resident_id, payload);
 
     return res.json({ ok: true, durationMinutes });
-
   } catch (err: any) {
     console.error("markExit", err);
     return res.status(500).json({ error: err.message });
   }
 }
 
-/* ---------------------------------------------------------
- * GET ANALYTICS FOR ESTATE
- * --------------------------------------------------------- */
+/* GET ANALYTICS FOR ESTATE */
 export async function getAnalyticsForEstate(req: Request, res: Response) {
   try {
     const estateId = req.params.estateId;
@@ -256,13 +233,9 @@ export async function getAnalyticsForEstate(req: Request, res: Response) {
     if (error) return res.status(500).json({ error: error.message });
 
     const totalVisitors = analytics.length;
-
     const todayStr = new Date().toISOString().slice(0, 10);
 
-    const todayVisitors = analytics.filter(a =>
-      a.arrived_at?.slice(0, 10) === todayStr
-    ).length;
-
+    const todayVisitors = analytics.filter(a => a.arrived_at?.slice(0, 10) === todayStr).length;
     const exitedVisitors = analytics.filter(a => a.exited_at != null).length;
 
     return res.json({
@@ -272,16 +245,13 @@ export async function getAnalyticsForEstate(req: Request, res: Response) {
       exitedVisitors,
       records: analytics
     });
-
   } catch (err: any) {
     console.error("getAnalyticsForEstate", err);
     return res.status(500).json({ error: err.message });
   }
 }
 
-/* ---------------------------------------------------------
- * GET VISITOR INFO (missing before)
- * --------------------------------------------------------- */
+/* GET VISITOR INFO */
 export async function getVisitorInfo(req: Request, res: Response) {
   try {
     const id = req.params.id;
@@ -297,7 +267,6 @@ export async function getVisitorInfo(req: Request, res: Response) {
       return res.status(404).json({ error: "Visitor not found" });
 
     return res.json({ visitor: data });
-
   } catch (err: any) {
     console.error("getVisitorInfo", err);
     return res.status(500).json({ error: err.message });
