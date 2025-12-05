@@ -1,7 +1,7 @@
 // src/controllers/communityController.ts
 import { Request, Response } from "express";
 import { supabaseAdmin } from "../supabase/supabaseClient";
-import { NotificationService, NotificationPayload } from "../services/NotificationService";
+import { NotificationService } from "../services/NotificationService";
 import { AuthRequest } from "../middleware/auth";
 
 // =============================
@@ -20,12 +20,10 @@ export async function createPost(req: AuthRequest, res: Response) {
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Notify estate residents
     await NotificationService.sendToEstate(estateId, {
       title: "New Community Post",
       message: `${req.user!.username} posted: ${title}`,
       type: "community",
-      entityId: data.id,
       payload: { postId: data.id },
     });
 
@@ -37,7 +35,6 @@ export async function createPost(req: AuthRequest, res: Response) {
 
 export async function getPostsForEstate(req: AuthRequest, res: Response) {
   const estateId = req.params.estateId;
-
   const { data, error } = await supabaseAdmin
     .from("community_posts")
     .select("*")
@@ -50,7 +47,6 @@ export async function getPostsForEstate(req: AuthRequest, res: Response) {
 
 export async function getPostById(req: AuthRequest, res: Response) {
   const postId = req.params.postId;
-
   const { data, error } = await supabaseAdmin
     .from("community_posts")
     .select("*")
@@ -124,16 +120,17 @@ export async function createComment(req: AuthRequest, res: Response) {
   const { content, parent_comment_id } = req.body;
   const userId = req.user!.id;
 
+  if (!content) return res.status(400).json({ error: "Content is required" });
+
   try {
     const { data, error } = await supabaseAdmin
       .from("community_comments")
-      .insert([{ post_id: postId, content, parent_comment_id, user_id: userId }])
+      .insert([{ post_id: postId, content, parent_comment_id: parent_comment_id || null, user_id: userId }])
       .select()
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Notify post owner
     const { data: post } = await supabaseAdmin
       .from("community_posts")
       .select("*")
@@ -145,7 +142,6 @@ export async function createComment(req: AuthRequest, res: Response) {
         title: "New Comment",
         message: `${req.user!.username} commented on your post`,
         type: "community",
-        entityId: postId,
         payload: { postId, commentId: data.id },
       });
     }
@@ -239,7 +235,7 @@ export async function reactToPost(req: AuthRequest, res: Response) {
     const { data, error } = await supabaseAdmin
       .from("community_reactions")
       .upsert(
-        { post_id: postId, user_id: userId, type },
+        [{ post_id: postId, user_id: userId, type }], // ✅ array with exact keys
         { onConflict: ["post_id", "user_id"] }
       )
       .select()
@@ -264,7 +260,7 @@ export async function reactToComment(req: AuthRequest, res: Response) {
     const { data, error } = await supabaseAdmin
       .from("community_reactions")
       .upsert(
-        { comment_id: commentId, user_id: userId, type },
+        [{ comment_id: commentId, user_id: userId, type }], // ✅ correct keys and array
         { onConflict: ["comment_id", "user_id"] }
       )
       .select()
@@ -292,10 +288,12 @@ export async function votePoll(req: AuthRequest, res: Response) {
     .single();
 
   if (fetchError || !post) return res.status(404).json({ error: "Post not found" });
+
   if (!post.poll || !post.poll.options) return res.status(400).json({ error: "No poll found" });
 
   const poll = post.poll;
   const optionIndex = poll.options.findIndex((o: any) => o.option === option);
+
   if (optionIndex === -1) return res.status(400).json({ error: "Invalid option" });
 
   poll.options[optionIndex].votes += 1;
