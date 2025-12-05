@@ -51,7 +51,7 @@ export async function createVisitor(req: Request, res: Response) {
     const qrS3Url = await createQrForLink(link, visitorId);
     await supabaseAdmin.from("visitor_access").update({ qr_s3_url: qrS3Url }).eq("id", visitorId);
 
-    // Notify user
+    // Notify resident
     const payload: NotificationPayload = {
       type: "visitor",
       entityId: visitorId,
@@ -77,7 +77,7 @@ export async function createVisitor(req: Request, res: Response) {
 }
 
 /* ---------------------------------------------------------
- * VERIFY VISITOR (Fix for router.post('/verify'))
+ * VERIFY VISITOR
  * --------------------------------------------------------- */
 export async function verifyVisitor(req: Request, res: Response) {
   try {
@@ -158,7 +158,7 @@ export async function markEntry(req: Request, res: Response) {
 
     const arrivedAt = new Date().toISOString();
 
-    const { data, error } = await supabaseAdmin
+    const { data } = await supabaseAdmin
       .from("visitor_analytics")
       .insert([{
         visitor_access_id: id,
@@ -257,8 +257,7 @@ export async function getAnalyticsForEstate(req: Request, res: Response) {
 
     const totalVisitors = analytics.length;
 
-    const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
+    const todayStr = new Date().toISOString().slice(0, 10);
 
     const todayVisitors = analytics.filter(a =>
       a.arrived_at?.slice(0, 10) === todayStr
@@ -279,3 +278,38 @@ export async function getAnalyticsForEstate(req: Request, res: Response) {
     return res.status(500).json({ error: err.message });
   }
 }
+
+/* ---------------------------------------------------------
+ * GET VISITOR INFO (missing before)
+ * --------------------------------------------------------- */
+export async function getVisitorInfo(req: Request, res: Response) {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ error: "id required" });
+
+    const { data, error } = await supabaseAdmin
+      .from("visitor_access")
+      .select("*, visitor_analytics(*)")
+      .eq("id", id)
+      .single();
+
+    if (error || !data)
+      return res.status(404).json({ error: "Visitor not found" });
+
+    return res.json({ visitor: data });
+
+  } catch (err: any) {
+    console.error("getVisitorInfo", err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+export default {
+  createVisitor,
+  verifyVisitor,
+  approveVisitor,
+  markEntry,
+  markExit,
+  getAnalyticsForEstate,
+  getVisitorInfo
+};
